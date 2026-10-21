@@ -627,6 +627,7 @@ export const de = {
     "activityIncludesThinking": "Enthält Denken",
     "activityFailures": "{{count}} Problem",
     "activityFailures_other": "{{count}} Probleme",
+    "wholeTurnProcess": "Gesamter Ablauf",
     "collapseProcess": "Prozess einklappen",
     "collapseActivityGroup": "Aktivitätsgruppe einklappen",
     "collapseToolOutput": "Tool-Ausgabe einklappen",

@@ -236,9 +236,8 @@ export const TranscriptTail = memo(function TranscriptTail({
 );
 
 /**
- * A `Bash`/run call rendered on its own, outside every process and activity
- * disclosure. It stays visible with all disclosures collapsed, and its own
- * detail stays closed until the user opens it.
+ * A `Bash`/run call rendered outside segment and activity disclosures, inside
+ * the whole-turn process. Its own detail stays closed until the user opens it.
  */
 const StandaloneRunRow = memo(function StandaloneRunRow({
   segment,
@@ -362,25 +361,34 @@ export const AssistantTurn = memo(function AssistantTurn({
       aria-label={t("chat.assistantMessage")}
     >
       <div className="message-col">
-        {segments.map((segment) => {
-          if (segment.kind === "run") {
-            return <StandaloneRunRow key={`run-${segment.key}`} segment={segment} />;
-          }
-          const ownsActiveTail =
-            activePart !== undefined && segment.parts.includes(activePart);
-          return (
-            <TurnProcess
-              key={`process-${segment.key}`}
-              turnId={segment.key}
-              processParts={segment.parts}
-              turnParts={entry.parts}
-              isActive={isActive && ownsActiveTail}
-              delegationStatuses={turnDelegationStatuses}
-            >
-              <AssistantTurnParts parts={segment.parts} {...partContext} />
-            </TurnProcess>
-          );
-        })}
+        <TurnProcess
+          scope="turn"
+          turnId={entry.id}
+          processParts={process}
+          turnParts={entry.parts}
+          isActive={isActive}
+          delegationStatuses={turnDelegationStatuses}
+        >
+          {segments.map((segment) => {
+            if (segment.kind === "run") {
+              return <StandaloneRunRow key={`run-${segment.key}`} segment={segment} />;
+            }
+            const ownsActiveTail =
+              activePart !== undefined && segment.parts.includes(activePart);
+            return (
+              <TurnProcess
+                key={`process-${segment.key}`}
+                turnId={segment.key}
+                processParts={segment.parts}
+                turnParts={entry.parts}
+                isActive={isActive && ownsActiveTail}
+                delegationStatuses={turnDelegationStatuses}
+              >
+                <AssistantTurnParts parts={segment.parts} {...partContext} />
+              </TurnProcess>
+            );
+          })}
+        </TurnProcess>
         <AssistantTurnParts parts={responses} {...partContext} />
         {generatedImages}
         {!isActive && metaMessage ? (

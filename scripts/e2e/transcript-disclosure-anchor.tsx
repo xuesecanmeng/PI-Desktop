@@ -298,6 +298,13 @@ globalThis.transcriptDisclosureProbe = async () => {
     );
     renderProcess(false);
     await settle();
+    const wholeTitle = processContainer.querySelector<HTMLElement>('[data-process-scope="turn"] > button');
+    assert(wholeTitle?.getAttribute("aria-expanded") === "false",
+      "an untouched whole process should collapse on completion");
+    // Reopen the outer level before interacting with its still-collapsed segment.
+    // Opening an ancestor preserves the segment's independent default.
+    wholeTitle.click();
+    await settle();
     const processCollapsed = geometry(processScroller, processTitle);
     assert(
       processTitle.getAttribute("aria-expanded") === "false",

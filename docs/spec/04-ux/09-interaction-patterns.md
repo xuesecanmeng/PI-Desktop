@@ -349,6 +349,10 @@ may be retained while exactly one workspace supplies the visible shell context.
   viewport offset, mounted-window budget, and explicit disclosure choices.
   Reading bookmarks outlive DOM eviction and project switches, but not a
   renderer/app restart; deleting the session releases them. If the bookmarked
+  message is already loaded, retain that continuous range and its latest tail
+  through selection revalidation. Restoring its position must not replace it
+  with a smaller history page or introduce a Load later messages boundary;
+  canonical streaming updates remain visible. If the bookmarked
   message is outside the loaded page, read a bounded range around it using the
   existing history API, without search focus or highlighting. Revalidation must
   not replace that reading range with the latest page. Real scroll input, search
@@ -917,23 +921,23 @@ may be retained while exactly one workspace supplies the visible shell context.
 
 - Tool activity starts as a lightweight collapsed item row. Failed and denied
   calls keep their issue in the row header and do not auto-expand their payload.
-- One unified presentation gives each loaded assistant turn chronological
-  collapsible process segments. They contain thinking, tools, hosted searches and
-  intermediate progress text; the trailing answer, assistant errors and stopped
-  trailing text remain outside them.
+- One whole-turn disclosure encloses the chronological collapsible process
+  segments and standalone commands. Closing it hides thinking, tools, hosted
+  searches, commands and progress text together, preserving every inner choice.
+  The trailing answer, assistant errors and stopped trailing text stay outside.
+  The outer level starts open while active and defaults closed on completion
+  unless the user owns its state; command-only turns retain this control.
 - A contiguous activity segment receives a group disclosure only when it has at
   least two visible items under the current thinking preference. Progress text or a
   Bash row ends the segment, a singleton uses its item disclosure directly, and
   hidden thinking does not create a redundant group. Existing Task topology remains
-  separate. Bash and run aliases are excluded from every process disclosure —
-  neither a turn-level process disclosure nor a group — and stay standalone rows
-  that remain visible even when every group is collapsed; adjacent Bash rows each
-  remain standalone.
+  separate. Bash and run aliases stay standalone outside segment/group
+  disclosures, inside the whole-turn process. Adjacent commands remain separate.
 - The active ordinary group starts open and closes when it completes only if
   untouched; completed groups otherwise start closed, and an untouched active group
   with any recorded failed/denied tool remains open through recovery. These group
   defaults do not depend on the thinking preference. Bash rows stay visible
-  regardless of any group's collapsed state.
+  regardless of inner group state while the whole-turn process is open.
 - No item payload opens itself: a tool, hosted-search or plan call stays a header
   row until the user opens it, including the literal final item of the last
   activity group. Group defaults are unchanged, so a final thinking item never
@@ -949,8 +953,9 @@ may be retained while exactly one workspace supplies the visible shell context.
   content the user opened, focused or selected. Choices survive preference
   changes, singleton-to-group growth and remounts while the retained session pane
   lives.
-- Search/navigation opens the process segment and activity group that own the named
-  message, once per reveal request. Item-level targeting is not part of this
+- Search/navigation opens the whole-turn process, process segment and activity
+  group that own the named message, once per reveal request. A command target
+  reveals the whole-turn process. Item-level targeting is not part of this
   change. Reasoning hidden by the preference stays hidden until the user turns
   `Show thinking` on. Closing search does not collapse the revealed path.
 - Pending permission, question, plan/goal approval and other action cards remain

@@ -852,8 +852,9 @@ reading surface of the workstation.
 
 ### Turn process and thinking display
 
-One unified turn-process presentation projects each loaded assistant turn into
-chronological collapsible process segments plus its trailing answer. Reasoning,
+One unified turn-process presentation gives each loaded assistant turn one outer
+whole-process disclosure around its chronological collapsible segments and
+standalone command rows, plus its trailing answer outside. Reasoning,
 tools, hosted searches and intermediate assistant text keep their transcript order
 across those segments. The trailing answer streams outside the process; later
 activity can reclassify provisional answer text into the process without changing
@@ -865,11 +866,16 @@ tool/search/thinking segment between progress paragraphs or Bash rows. It render
 group header only when at least two items are visible under the current thinking
 preference. A singleton uses its item disclosure directly, hidden thinking never
 creates an empty wrapper, and the existing Task topology remains the container for
-delegated work. Bash and run aliases are excluded from every process disclosure —
-neither a turn-level process disclosure nor an ordinary activity group — and render
-as standalone rows that stay visible even when every group is collapsed. Adjacent
-Bash rows each remain standalone, and a Bash row's detail stays closed until the
-user opens it.
+delegated work. Bash and run aliases stay outside segment and ordinary activity
+disclosures but inside the whole-process disclosure. Collapsing the outer level
+hides commands and every inner segment; reopening restores their independent
+choices. Command-only turns retain the outer control. Adjacent Bash rows each
+remain standalone, and a Bash row's detail stays closed until the user opens it.
+
+The whole-process control starts open while running and defaults closed at
+completion. Manual choices and nested interactions remain authoritative, and
+completion cannot hide focused or selected content. Its localized title identifies
+the whole turn; the answer and pending actions remain visible when it is closed.
 
 The ordinary group owning the active execution segment starts open while a turn is
 active, then closes on completion only if untouched; other completed groups start
@@ -891,13 +897,19 @@ Group and item are independent controls. Closing an ancestor keeps descendant
 choices and reopening restores them; opening a parent never expands all children.
 User interaction with a child claims its containing group without toggling it, so
 completion cannot close around opened, focused or selected content. Choices use
-stable turn/group/item identities and remain while the retained session pane lives,
-including preference changes and row remounts; pane eviction, deletion or renderer
-restart reapplies defaults rather than persisting disclosure state to messages or
-settings.
+stable whole-turn/segment/group/item identities and survive preference changes,
+row remounts and pane eviction through the session reading bookmark. Session
+deletion or renderer restart releases these choices; they are not persisted to
+messages or settings.
 
-Search/navigation reveals the process segment and the activity group that own the
-named message, and applies each reveal request once. Item-level targeting is not
+Each segment header measures only its segment's recorded start/end times, or its
+own live elapsed time while active. Standalone Bash calls, other process segments
+and the final answer do not inflate it; whole-turn state still determines whether
+the active segment is thinking. Only the outer whole-process summary measures the
+entire turn, including its final answer.
+
+Search/navigation reveals the whole process, process segment and activity group
+that own the named message, and applies each reveal request once. Item-level targeting is not
 part of this change. Reasoning hidden by the preference stays hidden until the user
 turns `Show thinking` on. Permission, question, plan/goal approval and other
 pending action cards remain reachable outside a hidden process. See
@@ -2256,9 +2268,9 @@ One contiguous tool/search/thinking segment between progress paragraphs or Bash
 rows becomes an ordinary processing group only when it has two or more visible
 items under the current thinking preference. A singleton uses its item disclosure
 directly, and Task topology keeps its existing container. Bash and run aliases are
-excluded from every process disclosure — neither a turn-level process disclosure
-nor an ordinary group — and render as standalone rows that stay visible even when
-every group is collapsed; adjacent Bash rows each remain standalone. While the
+outside segment and ordinary group disclosures but inside the whole-turn process.
+They stay visible with every inner group collapsed while the whole process is
+open, and disappear when it is closed; adjacent Bash rows remain separate. While the
 turn is active, the ordinary group owning the execution segment opens; when it
 settles, an untouched group closes. These group defaults do not depend on the
 thinking preference. No item payload opens itself: a tool, hosted-search or plan
@@ -2300,8 +2312,9 @@ seconds when non-zero) from one hour onward. Zero-value units are omitted, so
   auto-opens, so a final thinking item never selects an earlier tool. Live
   thinking follows its own indicator/disclosure policy and never opens sibling
   payloads.
-- Bash and run rows render standalone outside every process disclosure and stay
-  visible even when every group is collapsed; adjacent Bash rows remain separate.
+- Bash and run rows render standalone inside the whole-turn process and outside
+  inner segment/group disclosures; the outer control can hide them together with
+  all other process content. Adjacent Bash rows remain separate.
 - The processing group spans the full available assistant column, so expanded
   result details keep a usable width even when the header or payload is short.
 - The visible label is a natural-language action (`Read`, `Ran`, `Searched`),

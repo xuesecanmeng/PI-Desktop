@@ -39,7 +39,7 @@ export function processContainsMessage(
   });
 }
 
-/** A `Bash`/run call rendered as its own row outside any process disclosure. */
+/** A `Bash`/run call rendered outside inner segment and activity disclosures. */
 export type TurnProcessRunSegment = {
   kind: "run";
   key: string;
@@ -60,8 +60,8 @@ export type TurnProcessSegment = TurnProcessRunSegment | TurnProcessBodySegment;
  * turn-process-and-thinking-display).
  *
  * `Bash` and run aliases are pulled out of the process flow entirely: each is
- * its own `run` segment rendered as a standalone row with no process or group
- * ancestor, and adjacent calls stay separate. The remaining tools, thinking,
+ * its own `run` segment outside inner process/group disclosures, under the
+ * renderer's whole-turn disclosure. Adjacent calls stay separate. Other tools, thinking,
  * hosted searches and progress text keep their original order and are grouped
  * into `process` chunks between the run calls. Segment parts are the same part
  * objects as the input, so downstream reveal and active-tail identity still

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-17
-- Amended: 2026-10-16
+- Amended: 2026-10-20
 - Issues: #510, #461
 - Amends: D071, [ADR 0242](0242-delta-only-streaming-updates.md)
 
@@ -17,8 +17,9 @@ readers also need a thinking indicator without rapidly changing reasoning text.
 ## Decision
 
 One unified turn-process presentation applies to every loaded assistant-turn
-entry: it projects the entry into chronological collapsible process segments plus
-its trailing answer. Thinking, tools and intermediate assistant text keep their
+entry: one whole-turn disclosure contains chronological collapsible process
+segments and standalone command rows, followed by its trailing answer outside
+the disclosure. Thinking, tools and intermediate assistant text keep their
 original order across those segments. A trailing assistant text stays visible
 while streaming; if later tool or thinking activity follows, that text moves into
 the process without changing the stored message. There is no semantic
@@ -34,19 +35,25 @@ disclosure directly; hidden thinking does not create a redundant wrapper.
 Existing Task topology remains its segment's container and is not duplicated
 inside an ordinary activity group.
 
-Bash and run aliases are excluded from every process disclosure — neither a
-turn-level process disclosure nor an ordinary activity group — and render as
-standalone rows that stay visible even when every group is collapsed. Adjacent
-Bash rows each remain standalone, and a Bash row's detail stays closed until the
-user opens it. Other operations between progress paragraphs still form
-chronological collapsible activity groups.
+Bash and run aliases stay outside segment and ordinary activity disclosures,
+but belong to the whole-turn disclosure. Collapsing that outer level hides all
+process content, including commands; reopening it restores the independent
+segment, group and item choices. Adjacent Bash rows remain separate, and a Bash
+row's detail stays closed until the user opens it. Command-only turns still have
+the whole-turn control; empty or hidden completed thinking-only processes do not.
+
+The whole-turn disclosure starts open while running and defaults closed at
+completion. A manual choice, interaction with nested content, keyboard focus or
+text selection takes ownership, so automatic completion cannot reverse it. The
+trailing answer, assistant errors and actionable interruptions remain outside.
 
 Group folding defaults are unified and do not depend on the thinking preference.
 The ordinary activity group that owns the active execution segment starts open,
 then closes on completion only while untouched. Other completed groups start
 closed. An untouched active group containing any recorded failed or denied tool
 stays open through later recovery and closes on turn completion if still
-untouched. Bash rows remain visible regardless of any group's collapsed state.
+untouched. Bash rows remain visible when inner groups are collapsed and the
+whole-turn disclosure is open.
 
 The thinking preference is a boolean `showThinking`. When it is false, the live
 thinking indicator stays visible, while completed thinking rows and excerpts are
@@ -67,12 +74,13 @@ sibling groups do not form an accordion. Manual interaction with an item claims
 its containing group as user-owned without toggling it; completion must not close
 a container around content the user opened, focused, or selected. Manual choices
 survive streaming, completion, preference changes, reparenting from singleton to
-group, and row remounts while the owning retained session pane remains alive.
-Pane eviction, session deletion, or renderer restart releases this presentation
-memory; it is not stored in messages or host settings.
+group, row remounts and pane eviction through the session reading bookmark.
+Session deletion or renderer restart releases this presentation memory; it is not
+stored in messages or host settings.
 
-Search/navigation reveals the ancestor path its target needs: the process segment
-and the activity group that own the named message. Item-level targeting is not
+Search/navigation reveals the ancestor path its target needs: the whole-turn
+process, process segment and activity group that own the named message. A command
+target reveals the whole-turn process. Item-level targeting is not
 part of this change, so each row's own details stay behind its own disclosure.
 Replaying the same request does not repeatedly override a later manual close.
 Reasoning hidden by the preference stays hidden until the user turns
@@ -88,23 +96,28 @@ legacy field is retained for persisted-settings compatibility and is no longer
 exposed in the UI. The preference changes presentation only; it does not alter
 provider thinking levels, runtime/model context, stored reasoning, export,
 permissions, execution, or copy payloads, and it does not control process-segment
-or activity-group folding. Process headers use recorded timing, direct tool/search
-counts, running state, and issue counts; they do not double-count delegated child
-work or treat a failed child as a failed assistant turn.
+or activity-group folding. Segment headers use their own segment's recorded
+timing, direct tool/search counts, running state, and issue counts. Whole-turn
+state determines thinking visibility, but other segments, standalone Bash rows,
+and the final answer do not contribute to that header's elapsed time. Headers do
+not double-count delegated child work or treat a failed child as a failed
+assistant turn. Only the outer whole-turn summary measures the entire turn,
+including its answer, and labels itself as the whole-turn process.
 
 ## Consequences
 
-- Chronological collapsible process segments keep the final answer and actionable
-  interruptions reachable, and Bash/run rows stay visible even when every group is
-  collapsed.
+- The outer whole-turn control can hide all process content, including Bash/run
+  rows, while the final answer and actionable interruptions remain reachable.
+- Inner segment, group and item controls retain independent choices across outer
+  close/reopen, streaming and completion.
 - Group folding defaults are unified: active work stays visible, untouched
   completed groups fold by default, and explicit disclosure choices are preserved
   regardless of the thinking preference.
 - When `showThinking` is false, the live indicator stays visible while completed
   reasoning rows and excerpts are hidden. The stored reasoning is retained and
   reappears when the preference is turned back on.
-- Bash and run aliases stay standalone rows outside every process disclosure, so
-  shell-heavy turns remain scannable without folding adjacent commands together.
+- Bash and run aliases stay standalone rows within the whole-turn process, so
+  adjacent commands remain individually readable when it is open.
 - Disclosure memory is pane-owned presentation state with stable turn, group,
   and item identities; it is neither a persisted transcript contract nor a
   central workflow-store concern.
@@ -126,3 +139,7 @@ covers the `showThinking`/legacy `thinkingDisplayMode` resolver precedence, and
 the i18n catalog tests cover the new `settings.showThinking` copy. The UI,
 resolver, and E2E scenarios are validated on the integration candidate; see
 E2E-CHAT-turn-process-and-thinking-display for the synchronized scenario text.
+For the 2026-10-20 amendment, the real `AssistantTurn` probe in
+`scripts/e2e/turn-process.tsx` covers whole-turn completion, manual and keyboard
+ownership, command visibility, nested-choice preservation, session pane remounts,
+command-only turns and search reveal, alongside independent segment timing.
