@@ -7905,6 +7905,10 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   at wide and narrow widths, scroll to the tenth task, and switch output previews
   while an earlier read is pending. 7) Fail a Stop request and retry it.
   8) Start two more tasks and quit the app during output capture.
+  9) Start distinct background commands in A and B, switch A → B → an empty C
+  → A, and check each session's rows. Switch with A's output read or Stop request
+  pending, then complete the old response. Stop A's task and inspect B's process.
+  Start several tasks in order and compare both running and terminal lists.
 - **Expected**: The tool result carries `backgroundTaskId` and resolves without
   waiting for the command; the bar lists the task as running with a growing
   elapsed time and shows its streamed output; the process stays alive across the
@@ -7917,6 +7921,11 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   visible without an unhandled rejection and the control remains retryable.
   An ended task keeps its row only for a short grace window and can be closed
   from the bar, so finished commands do not accumulate above the composer.
+  Only the selected session's tasks, output and errors appear; C and a home
+  without an active session show no task rows. Switching never stops processes,
+  and late A responses cannot appear in B. Stopping A leaves B alive. Running
+  tasks precede terminal tasks, with newest starts first in both groups,
+  independent of UUID order or equal start timestamps.
 - **Specs linked**: `03-runtime/03-tools-and-permissions.md` (§5),
   `03-runtime/06-host-rpc-protocol.md` (§4)
 - **Acceptance criterion**: C, E, F

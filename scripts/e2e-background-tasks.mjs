@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveElectronBinary } from "./e2e/boot.mjs";
 
@@ -31,10 +31,10 @@ await build({
   plugins: baseline ? [{
     name: "baseline-background-tasks",
     setup(build) {
-      build.onLoad({ filter: /[\\/]BackgroundTasksBar\.tsx$/ }, () => ({
-        contents: original("apps/desktop/src/components/BackgroundTasksBar.tsx"),
-        loader: "tsx",
-        resolveDir: join(root, "apps/desktop/src/components"),
+      build.onLoad({ filter: /[\\/](?:BackgroundTasksBar\.tsx|useBackgroundTasks\.ts|bar-visibility\.ts)$/ }, ({ path }) => ({
+        contents: original(relative(root, path).replaceAll("\\", "/")),
+        loader: path.endsWith(".tsx") ? "tsx" : "ts",
+        resolveDir: dirname(path),
       }));
     },
   }] : [],
@@ -89,7 +89,8 @@ const child = spawn(electronBinary, [join(artifacts, "main.cjs")], {
 });
 let output = "";
 for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => { output += chunk; });
-const timer = setTimeout(() => child.kill("SIGKILL"), 90_000);
+// Three viewports now include session switches, late replies and idle expiry.
+const timer = setTimeout(() => child.kill("SIGKILL"), 150_000);
 let code;
 try {
   code = await new Promise((resolve, reject) => {

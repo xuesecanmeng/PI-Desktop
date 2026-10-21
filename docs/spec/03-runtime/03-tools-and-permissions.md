@@ -430,6 +430,14 @@ Host execution baseline:
   tree, reports it through the composer's running-tasks bar, and stops it on
   request or on app shutdown. At most 32 tasks run concurrently and each stream
   keeps its last 256KB.
+- The composer shows only tasks whose `sessionId` matches the active session;
+  a session with no tasks, or no active session, has no task rows. Switching
+  sessions hides other tasks and their output/errors without stopping their
+  processes. Returning shows that session's still-running work. Late output
+  and Stop failures remain scoped to the originating session.
+- Tasks are ordered with running work first, then newest start first within
+  each group. Host registration order is authoritative, including coincident
+  starts; random task IDs never determine chronological order.
 - Background output is drained before a terminal state is published, including
   output queued when the process exits or is stopped. UTF-8 characters split
   across pipe reads remain intact. Shutdown signals do not acquire output locks.

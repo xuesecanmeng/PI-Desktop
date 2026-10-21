@@ -468,6 +468,11 @@ off | minimal | low | medium | high | xhigh | max
 不承担高频日志传输。客户端只读取当前展开的输出。最终状态包含排空后的尾部输出，
 即使并发读取占用输出锁，关闭宿主仍会向每个任务发送停止信号。
 
+`backgroundTasks.list` remains host-wide and includes each task's `sessionId`.
+Running tasks come first, with reverse registration/start order within both
+running and terminal groups. The composer filters to the active session;
+session navigation never calls `backgroundTasks.stop`.
+
 ### 贝壳
 - `commandShells.list`
 - `settings.set` 带有部分设置对象；保留省略的字段，

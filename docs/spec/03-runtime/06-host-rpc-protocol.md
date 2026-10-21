@@ -684,6 +684,11 @@ lifecycle invalidation, not a high-volume log transport. Clients fetch only the
 selected output preview. A terminal snapshot includes the final drained output,
 and shutdown signals every registered task even during a concurrent output read.
 
+`backgroundTasks.list` remains a host-wide snapshot with each task's `sessionId`.
+It returns running tasks first, preserving reverse registration/start order
+within running and terminal groups. The composer filters this snapshot to the
+active session; navigation does not call `backgroundTasks.stop`.
+
 ### Shells
 - `commandShells.list`
 - `settings.set` with a partial settings object; omitted fields are preserved,

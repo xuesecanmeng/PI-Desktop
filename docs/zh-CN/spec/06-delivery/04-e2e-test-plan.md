@@ -4574,12 +4574,20 @@ eleven-tool-round desktop paths are verified by
   输出十万行、每行一百字符，检查最终输出。6) 在宽窄窗口同时展示 Todo、Ask 和
   任务列表，滚动到第十个任务，在旧读取未完成时切换日志。7) 模拟停止失败后重试。
   8) 再启动两个任务，在输出读取期间退出应用。
+  9) Start tasks in A and B, switch A → B → empty C → A, and switch while
+  A output/Stop is pending. Complete the old response, stop A, inspect B, and
+  compare task start order before and after completion.
 - **预期**：工具结果携带 `backgroundTaskId` 且不等待命令结束；任务栏显示运行中的
   任务与递增的耗时，并展示流式输出；进程在中止后、Bash 60 秒超时后、渲染进程重载后
     仍然存活。“停止”把该行落定为“已停止”并杀掉整个进程树；退出应用后不残留孤儿进程。
   十任务列表在限高区域内滚动，不挤占 Todo、Ask 和输入框；仅刷新当前展开的日志，
   过期响应不能清空新预览。每个流保持 256KiB 上限并保留最终标记。停止失败可见、
   无未处理的 Promise 拒绝，且可以重试。
+  Only the active session's tasks, output and errors appear. Empty C and home
+  without a session show no task rows. Navigation preserves both processes;
+  late A responses cannot leak into B, and stopping A leaves B alive. Running
+  tasks come first, then newest starts first within each group, regardless of
+  UUID order or coincident timestamps.
 - **关联规范**：`03-runtime/03-tools-and-permissions.md`（§5）、
   `03-runtime/06-host-rpc-protocol.md`（§4）
 - **验收标准**：C、E、F

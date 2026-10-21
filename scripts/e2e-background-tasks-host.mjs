@@ -13,10 +13,20 @@ await mkdir(artifacts, { recursive: true });
 const scratch = await mkdtemp(join(artifacts, "run-"));
 const workspace = join(scratch, "workspace");
 await mkdir(workspace);
+const home = join(scratch, "home");
+const appData = join(home, "AppData", "Roaming");
+const localAppData = join(home, "AppData", "Local");
+const agentsDir = join(home, ".agents");
+await Promise.all([home, appData, localAppData, agentsDir].map(path => mkdir(path, { recursive: true })));
 await copyFile(join(root, "scripts/e2e/background-task-output.mjs"), join(workspace, "output.mjs"));
 const host = new Host(resolveHostBinary(), join(scratch, "data"), {
   quiet: true,
-  env: { PATH: [dirname(process.execPath), process.env.PATH].filter(Boolean).join(delimiter) },
+  env: {
+    PATH: [dirname(process.execPath), process.env.PATH].filter(Boolean).join(delimiter),
+    HOME: home, USERPROFILE: home, APPDATA: appData, LOCALAPPDATA: localAppData,
+    XDG_CONFIG_HOME: join(home, ".config"), XDG_DATA_HOME: join(home, ".local", "share"),
+    PI_DESKTOP_AGENTS_DIR: agentsDir,
+  },
 });
 const rpcDurations = [];
 const timedCall = async (method, params = {}) => {
@@ -94,6 +104,52 @@ try {
     assert(Buffer.byteLength(output.stdout) <= 256 * 1024);
     assert(Buffer.byteLength(output.stderr) <= 256 * 1024);
   }
+  await writeFile(join(workspace, "session-worker.mjs"), `
+import { existsSync, watch, writeFileSync } from "node:fs";
+const name = process.argv[2];
+const gate = watch(".", () => {
+  if (existsSync(name + ".release")) {
+    gate.close();
+    console.log("finished-" + name);
+  }
+});
+console.log("ready-" + name);
+writeFileSync(name + ".ready", "");
+`);
+  const otherSession = await createSession(host, workspace, "Background ownership B");
+  await configureSession(host, otherSession, "agent", "auto");
+  const ownedTurnA = await beginTurn(host, session.id);
+  const ownedTurnB = await beginTurn(host, otherSession.id);
+  const startOwned = async (sessionId, turnId, name) => {
+    const result = await host.call("tools.execute", {
+      sessionId, turnId, toolCallId: `owned-${name}`, toolName: "Bash",
+      args: { command: `node session-worker.mjs ${name}`, runInBackground: true },
+      mode: "agent", runInBackground: true,
+      expectedCommandShellId: shell.id, expectedCommandShellDialect: shell.dialect,
+    });
+    assert(result.ok && result.content.backgroundTaskId, JSON.stringify(result));
+    await until(() => access(join(workspace, `${name}.ready`)).then(() => true, () => false), `${name} must start`);
+    return result.content.backgroundTaskId;
+  };
+  const ownedA = await startOwned(session.id, ownedTurnA, "A");
+  const ownedB = await startOwned(otherSession.id, ownedTurnB, "B");
+  const ownedTasks = async () => (await host.call("backgroundTasks.list")).tasks
+    .filter(task => task.id === ownedA || task.id === ownedB);
+  assert.deepEqual((await ownedTasks()).map(task => task.id), [ownedB, ownedA], "later starts precede earlier starts");
+  await host.call("tools.abort", { sessionId: session.id, toolCallId: "owned-A" });
+  await endTurn(host, ownedTurnA, "aborted");
+  await endTurn(host, ownedTurnB, "completed");
+  assert((await ownedTasks()).every(task => task.state === "running"), "both sessions' background work survives turn changes");
+  assert.equal((await host.call("backgroundTasks.stop", { id: ownedA })).found, true);
+  await until(async () => (await ownedTasks()).find(task => task.id === ownedA)?.state === "stopped", "A must stop");
+  const afterStop = await ownedTasks();
+  assert.equal(afterStop.find(task => task.id === ownedA)?.sessionId, session.id);
+  assert.equal(afterStop.find(task => task.id === ownedB)?.sessionId, otherSession.id);
+  assert.equal(afterStop.find(task => task.id === ownedB)?.state, "running", "stopping A cannot stop B");
+  await writeFile(join(workspace, "B.release"), "");
+  await until(async () => (await ownedTasks()).find(task => task.id === ownedB)?.state === "exited", "B must finish independently");
+  assert.deepEqual((await ownedTasks()).map(task => task.id), [ownedB, ownedA], "terminal tasks retain reverse start order");
+  assert((await host.call("backgroundTasks.output", { id: ownedB })).stdout.includes("finished-B"));
   rpcDurations.sort((a, b) => a - b);
   const result = {
     tasks: 10, shell: shell.id, linesPerTaskPerStream: 100_000, bytesProduced: 202_000_000,
@@ -101,6 +157,7 @@ try {
     rpcP95Ms: Number(rpcDurations[Math.floor(rpcDurations.length * 0.95)].toFixed(2)),
     rpcMaxMs: Number(rpcDurations.at(-1).toFixed(2)),
     turnAbortSurvived: true, finalOutputRetained: true,
+    sessionOwnership: { sessions: 2, startOrderVerified: true, independentStopVerified: true },
   };
   await writeFile(join(scratch, "result.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));

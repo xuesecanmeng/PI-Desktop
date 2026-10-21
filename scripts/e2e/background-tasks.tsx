@@ -12,6 +12,7 @@ import type { BackgroundTaskOutput, BackgroundTaskSummary } from "../../apps/des
 
 const listeners = new Set<() => void>();
 const requests: string[] = [];
+const stopRequests: string[] = [];
 const pending = new Map<string, (value: BackgroundTaskOutput) => void>();
 let tasks: BackgroundTaskSummary[] = [];
 let revision = 0;
@@ -52,6 +53,7 @@ Object.defineProperty(window, "piDesktop", {
           return output(id);
         }
         if (channel === IPC.invoke.backgroundTasksStop) {
+          stopRequests.push(payload!.id);
           if (rejectStop) throw new Error("Fixture stop failure");
           tasks = tasks.map((task) => task.id === payload!.id ? { ...task, state: "stopped" } : task);
           for (const listener of listeners) listener();
@@ -74,6 +76,7 @@ async function mount(count = 10) {
   flushSync(() => root?.unmount());
   pending.clear();
   requests.length = 0;
+  stopRequests.length = 0;
   revision = 0;
   deferOutput = false;
   rejectStop = false;
@@ -138,6 +141,88 @@ async function probe() {
     try { await run(); results.push({ name, ok: true }); }
     catch (error) { results.push({ name, ok: false, error: String(error) }); }
   };
+
+  const select = (sessionId: string | undefined) => {
+    flushSync(() => useAppStore.setState({ activeSessionId: sessionId }));
+  };
+  const mountSessions = async () => {
+    await mount(2);
+    tasks = tasks.map((task, index) => ({
+      ...task, id: `task-${index === 0 ? "A" : "B"}`,
+      sessionId: index === 0 ? "A" : "B",
+      command: index === 0 ? "node alpha.js" : "node beta.js",
+    }));
+    select("A");
+    for (const listener of listeners) listener();
+    await until(() => !!document.querySelector(".background-task-command")?.textContent?.includes("alpha.js"), "session A task is missing");
+  };
+
+  await check("A-B-A navigation scopes rows and discards another session's late output", async () => {
+    await mountSessions();
+    assert(document.querySelectorAll(".background-task").length === 1, "A must not show B's task");
+    deferOutput = true;
+    click(0);
+    await until(() => pending.has("task-A"), "A output request is missing");
+    const resolveA = pending.get("task-A")!;
+    select("B");
+    assert(document.querySelectorAll(".background-task").length === 1, "B must not show A's task");
+    assert(row(0).textContent?.includes("beta.js"), "B must show its own command immediately");
+    assert(!document.querySelector("pre"), "A's output must disappear on session switch");
+    click(0);
+    await until(() => pending.has("task-B"), "B output request is missing");
+    resolveA(output("task-A"));
+    await frame();
+    assert(!document.querySelector("pre")?.textContent?.includes("task-A"), "late A output leaked into B");
+    pending.get("task-B")!(output("task-B"));
+    await until(() => !!document.querySelector("pre")?.textContent?.includes("task-B"), "B output is missing");
+    select("C");
+    assert(!document.querySelector(".background-tasks-bar"), "an empty session must not show other sessions' tasks");
+    select(undefined);
+    assert(!document.querySelector(".background-tasks-bar"), "home without a session must not show tasks");
+    select("A");
+    assert(row(0).textContent?.includes("alpha.js"), "returning to A must restore A's running task");
+    assert(tasks.every((task) => task.state === "running") && stopRequests.length === 0,
+      "session navigation must never stop a background process");
+  });
+
+  await check("Stop and its delayed failure remain owned by the originating session", async () => {
+    await mountSessions();
+    rejectStop = true;
+    click(0, "Stop");
+    select("B");
+    await frame();
+    await frame();
+    assert(!document.querySelector('[role="alert"]'), "A Stop failure must not appear in B");
+    select("A");
+    assert(!!document.querySelector('[role="alert"]'), "A must retain its own retryable Stop failure");
+    rejectStop = false;
+    click(0, "Stop");
+    await until(() => row(0).dataset.state === "stopped", "A Stop retry did not settle");
+    assert(stopRequests.every((id) => id === "task-A"), "Stop must address A's task ID");
+    assert(tasks.find((task) => task.id === "task-B")?.state === "running", "stopping A must preserve B");
+    select("B");
+    assert(document.querySelectorAll(".background-task").length === 1 && row(0).dataset.state === "running",
+      "B's task must remain running after A stops");
+  });
+
+  await check("returning after idle polling cannot revive an expired finished row", async () => {
+    const originalNow = Date.now;
+    let now = originalNow();
+    Date.now = () => now;
+    try {
+      await mountSessions();
+      select("B");
+      tasks = tasks.map((task) => ({ ...task, state: "exited", exitCode: 0 }));
+      for (const listener of listeners) listener();
+      await until(() => row(0).dataset.state === "exited", "terminal snapshot is missing");
+      select("C");
+      now += 20_000;
+      select("A");
+      assert(!document.querySelector(".background-tasks-bar"), "expired A history reappeared after polling stopped");
+    } finally {
+      Date.now = originalNow;
+    }
+  });
 
   await check("ten tasks scroll without displacing Todo, Ask, or input", async () => {
     await mount();

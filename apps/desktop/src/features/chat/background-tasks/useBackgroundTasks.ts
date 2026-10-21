@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type BackgroundTaskOutput, type BackgroundTaskSummary } from "../../../lib/api";
+import { useAppStore } from "../../../stores/app-store";
 import {
   type BarVisibility,
   EMPTY_VISIBILITY,
@@ -11,8 +12,10 @@ import {
 
 const REFRESH_MS = 1_000;
 type Failure = "load" | "output" | "stop";
+type ScopedFailure = { kind: Failure; sessionId: string | null };
 
 export function useBackgroundTasks() {
+  const sessionId = useAppStore((state) => state.activeSessionId ?? null);
   const [tasks, setTasks] = useState<BackgroundTaskSummary[]>([]);
   // Renderer-local view state: which tasks the bar may show. The registry in
   // host-core stays the source of truth for the processes themselves.
@@ -21,7 +24,7 @@ export function useBackgroundTasks() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [output, setOutput] = useState<BackgroundTaskOutput | null>(null);
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(() => new Set());
-  const [error, setError] = useState<Failure | null>(null);
+  const [error, setError] = useState<ScopedFailure | null>(null);
   const mounted = useRef(false);
   const pendingStops = useRef(new Set<string>());
   const refreshList = useRef<(() => void) | null>(null);
@@ -47,12 +50,12 @@ export function useBackgroundTasks() {
         setTasks(result.tasks);
         setVisibility((current) => observeTasks(current, result.tasks, observedAt));
         setClock(observedAt);
-        setError((current) => current === "load" ? null : current);
+        setError((current) => current?.kind === "load" ? null : current);
         pollAgain = result.tasks.some((task) => task.state === "running");
       } catch (failure) {
         if (disposed) return;
         console.error("Background task list failed", failure);
-        setError("load");
+        setError({ kind: "load", sessionId: useAppStore.getState().activeSessionId ?? null });
         pollAgain = true;
       } finally {
         inFlight = false;
@@ -80,31 +83,37 @@ export function useBackgroundTasks() {
 
   // Only what the bar should render: running tasks, a finished task during its
   // post-exit grace window, and the row whose output the user is reading.
-  const visibleTasks = selectVisibleTasks(visibility, tasks, clock, expandedId);
+  // Registry observation is global; only presentation follows the session.
+  // Switching never signals or cancels a background process.
+  // Navigation must also expire old rows after global polling has gone idle.
+  const now = Math.max(clock, Date.now());
+  const visibleTasks = selectVisibleTasks(visibility, tasks, now, sessionId, expandedId);
 
   useEffect(() => {
-    const expiry = nextExpiryAt(visibility, tasks, clock, expandedId);
+    const expiry = nextExpiryAt(visibility, tasks, now, sessionId, expandedId);
     if (expiry === null) return;
-    const timer = setTimeout(() => setClock(Date.now()), Math.max(0, expiry - clock));
+    const timer = setTimeout(() => setClock(Date.now()), Math.max(0, expiry - now));
     return () => clearTimeout(timer);
-  }, [visibility, tasks, clock, expandedId]);
+  }, [visibility, tasks, now, sessionId, expandedId]);
 
-  const selectedState = tasks.find((task) => task.id === expandedId)?.state;
+  const selectedTask = visibleTasks.find((task) => task.id === expandedId);
+  const visibleExpandedId = selectedTask?.id ?? null;
+  const selectedState = selectedTask?.state;
   useEffect(() => {
     setOutput(null);
-    if (!expandedId) return;
+    if (!visibleExpandedId) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
       try {
-        const result = await api.backgroundTasksOutput(expandedId);
+        const result = await api.backgroundTasksOutput(visibleExpandedId);
         if (disposed) return;
         setOutput(result);
-        setError((current) => current === "output" ? null : current);
+        setError((current) => current?.kind === "output" ? null : current);
       } catch (failure) {
         if (disposed) return;
         console.error("Background task output failed", failure);
-        setError("output");
+        setError({ kind: "output", sessionId });
       } finally {
         // Only the selected log crosses IPC, with at most one read in flight.
         if (!disposed && selectedState === "running") {
@@ -117,12 +126,14 @@ export function useBackgroundTasks() {
       disposed = true;
       clearTimeout(timer);
     };
-  }, [expandedId, selectedState]);
+  }, [visibleExpandedId, selectedState, sessionId]);
 
   const toggleOutput = useCallback((id: string) => {
+    const activeSessionId = useAppStore.getState().activeSessionId;
+    if (!tasks.some((task) => task.id === id && task.sessionId === activeSessionId)) return;
     setExpandedId((current) => current === id ? null : id);
-    setError((current) => current === "output" ? null : current);
-  }, []);
+    setError((current) => current?.kind === "output" ? null : current);
+  }, [tasks]);
 
   const dismiss = useCallback((id: string) => {
     setVisibility((current) => dismissTask(current, id));
@@ -130,6 +141,9 @@ export function useBackgroundTasks() {
   }, []);
 
   const stop = useCallback(async (id: string) => {
+    const activeSessionId = useAppStore.getState().activeSessionId;
+    const task = tasks.find((entry) => entry.id === id && entry.sessionId === activeSessionId);
+    if (!task) return;
     if (pendingStops.current.has(id)) return;
     pendingStops.current.add(id);
     setStoppingIds(new Set(pendingStops.current));
@@ -140,20 +154,20 @@ export function useBackgroundTasks() {
     } catch (failure) {
       if (mounted.current) {
         console.error("Background task stop failed", failure);
-        setError("stop");
+        setError({ kind: "stop", sessionId: task.sessionId });
       }
     } finally {
       pendingStops.current.delete(id);
       if (mounted.current) setStoppingIds(new Set(pendingStops.current));
     }
-  }, []);
+  }, [tasks]);
 
   return {
     tasks: visibleTasks,
-    expandedId,
-    output,
+    expandedId: visibleExpandedId,
+    output: output?.id === visibleExpandedId ? output : null,
     stoppingIds,
-    error,
+    error: error && sessionId !== null && error.sessionId === sessionId ? error.kind : null,
     toggleOutput,
     stop,
     dismiss,

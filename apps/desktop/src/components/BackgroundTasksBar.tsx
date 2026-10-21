@@ -8,7 +8,7 @@ import { Button } from "./ui";
 const NO_OUTPUT = "—";
 
 /**
- * Shows chat-started background commands (dev servers, watchers) above the
+ * Shows the current session's background commands (dev servers, watchers) above the
  * composer. The lifecycle lives in host-core — a task survives turn aborts
  * and renderer reloads; this bar only reflects registry state and can stop a
  * task on request.

@@ -151,8 +151,10 @@ impl BackgroundTaskRegistry {
 
     pub fn summaries(&self) -> Vec<BackgroundTaskSummary> {
         let mut list: Vec<BackgroundTaskSummary> = self
-            .tasks
-            .values()
+            .order
+            .iter()
+            .rev()
+            .filter_map(|id| self.tasks.get(id))
             .map(|task| {
                 let (state, exit_code) = Self::snapshot(task);
                 BackgroundTaskSummary {
@@ -166,17 +168,9 @@ impl BackgroundTaskRegistry {
                 }
             })
             .collect();
-        // Running tasks first, then newest first, so the bar reads naturally.
-        list.sort_by(|a, b| {
-            let rank = |s: &BackgroundTaskSummary| {
-                if s.state == BackgroundTaskState::Running {
-                    0
-                } else {
-                    1
-                }
-            };
-            rank(a).cmp(&rank(b)).then_with(|| b.id.cmp(&a.id))
-        });
+        // Stable partition preserves reverse registration order within each
+        // state group. Random UUIDs never determine chronological order.
+        list.sort_by_key(|task| task.state != BackgroundTaskState::Running);
         list
     }
 }
@@ -472,6 +466,68 @@ impl BackgroundTaskRegistry {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn summaries_sort_running_first_then_reverse_start_order_not_random_ids() {
+        let mut registry = BackgroundTaskRegistry::default();
+        // Oppose UUID lexical order and give every task the same timestamp.
+        // Registration order remains authoritative even when starts coincide.
+        let started_at = Instant::now();
+        for (id, state) in [
+            (
+                "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                BackgroundTaskState::Running,
+            ),
+            (
+                "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+                BackgroundTaskState::Exited,
+            ),
+            (
+                "00000000-0000-4000-8000-000000000000",
+                BackgroundTaskState::Running,
+            ),
+            (
+                "11111111-1111-4111-8111-111111111111",
+                BackgroundTaskState::Stopped,
+            ),
+        ] {
+            let (stop, _receiver) = watch::channel(false);
+            registry.order.push(id.to_string());
+            registry.tasks.insert(
+                id.to_string(),
+                BackgroundTask {
+                    id: id.to_string(),
+                    session_id: "session-sort".to_string(),
+                    command: "node worker.js".to_string(),
+                    command_shell_id: "bash".to_string(),
+                    started_at,
+                    shared: Arc::new(Mutex::new(TaskShared {
+                        state,
+                        exit_code: None,
+                        stdout: VecDeque::new(),
+                        stderr: VecDeque::new(),
+                        stdout_bytes: 0,
+                        stderr_bytes: 0,
+                        truncated: false,
+                    })),
+                    stop,
+                },
+            );
+        }
+        let summaries = registry.summaries();
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "00000000-0000-4000-8000-000000000000",
+                "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                "11111111-1111-4111-8111-111111111111",
+                "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            ]
+        );
+    }
 
     #[tokio::test]
     async fn retains_output_when_the_process_exits_before_supervision_starts() {

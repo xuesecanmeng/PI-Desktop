@@ -393,6 +393,13 @@ tool/protocol 名称，请求中单独携带固定的 shell ID。
   不再套用超时，进程也不会被 `tools.abort` / `agent.abort` 终止。进程树归宿主
   所有，通过输入框上方的运行中任务栏展示，可由用户停止或随应用退出而结束。
     最多同时运行 32 个任务，每个输出流保留最后 256KB。
+- The composer displays only the active session's background tasks. Switching
+  sessions hides other tasks and their output/errors without stopping the
+  processes; returning restores that session's running work. With no active
+  session, no task rows appear. Late output and Stop failures stay scoped to
+  their originating session.
+- Running tasks come first; each group uses reverse Host registration order,
+  including coincident starts, rather than random task IDs.
 - 后台任务先排空输出，再发布最终状态，保留跨管道读取边界的 UTF-8 字符；
   退出和停止时已排队的输出不会丢失。关闭宿主时发送停止信号不依赖输出锁。
 - 输入框上方保持 Todo、后台命令、Plan/Ask 决策、输入框的既有顺序，没有可配置的

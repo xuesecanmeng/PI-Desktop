@@ -139,7 +139,7 @@ test("the bar shows only live work: a finished row expires and can be closed", a
   );
   // The grace window is a named constant, not a magic number in the component.
   assert.match(visibility, /export const ENDED_VISIBLE_MS = 10_000;/);
-  assert.match(controller, /selectVisibleTasks\(visibility, tasks, clock, expandedId\)/);
+  assert.match(controller, /selectVisibleTasks\(visibility, tasks, now, sessionId, expandedId\)/);
   assert.match(controller, /observeTasks\(current, result\.tasks, observedAt\)/);
   assert.match(controller, /dismissTask\(current, id\)/);
   // A finished row offers closing instead of stopping: it must be able to leave
