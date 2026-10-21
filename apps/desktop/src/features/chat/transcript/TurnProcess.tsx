@@ -26,12 +26,14 @@ export function TurnProcess({
   turnParts,
   delegationStatuses,
   isActive,
+  scope = "segment",
   children,
 }: {
   turnId: string;
   processParts: readonly AssistantTurnPart[];
   turnParts: readonly AssistantTurnPart[];
   isActive: boolean;
+  scope?: "turn" | "segment";
   delegationStatuses?: ReadonlyMap<string, SubagentOutcome>;
   children: ReactNode;
 }) {
@@ -52,11 +54,14 @@ export function TurnProcess({
   const disclosure = useAutomaticDisclosure(
     isActive,
     revealRequest,
-    disclosureKey("turn", turnId),
+    disclosureKey(scope === "turn" ? "whole-turn" : "turn", turnId),
   );
   const detailsId = useId();
   const [now, setNow] = useState(Date.now);
-  const { startedAt, endedAt } = useMemo(() => turnProcessTiming(turnParts), [turnParts]);
+  // Only the outer summary measures the whole turn, including its answer.
+  // Segment timing stays local even when later commands or answers change.
+  const timingParts = scope === "turn" ? turnParts : processParts;
+  const { startedAt, endedAt } = useMemo(() => turnProcessTiming(timingParts), [timingParts]);
   useEffect(() => {
     if (!isActive) return;
     setNow(Date.now());
@@ -68,7 +73,10 @@ export function TurnProcess({
     0, Math.floor(((isActive ? now : (endedAt ?? startedAt)) - startedAt) / 1000),
   );
   return (
-    <section className={`turn-process${disclosure.open ? " open" : ""}${isActive ? " active" : ""}`}>
+    <section
+      className={`${scope === "turn" ? "turn-process-whole" : "turn-process"}${disclosure.open ? " open" : ""}${isActive ? " active" : ""}`}
+      data-process-scope={scope}
+    >
       <button
         type="button"
         ref={disclosure.titleRef}
@@ -79,6 +87,7 @@ export function TurnProcess({
       >
         <span className="tool-activity-icon" aria-hidden><IconSparkles size={14} /></span>
         <span className={`tool-activity-label${isActive ? " running" : ""}`}>
+          {scope === "turn" ? `${t("chat.wholeTurnProcess")} · ` : null}
           {t(isActive ? thinkingNow ? "chat.thinkingFor" : "chat.processingFor" : "chat.processedFor", {
             time: formatToolDuration(seconds),
           })}

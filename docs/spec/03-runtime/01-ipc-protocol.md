@@ -2024,10 +2024,13 @@ type WindowControlAction =
   | "getState" | "minimize" | "toggleMaximize" | "close";
 
 window/control({ action: WindowControlAction })
-  -> { maximized: boolean; fullScreen: boolean }
+  -> { maximized: boolean; fullScreen: boolean; macosWindowTranslucency: boolean }
 ```
 
-All replies use the same maximized/fullscreen state shape. In fullscreen, the
+All window-control replies include the native maximized/fullscreen flags and
+the macOS surface the running window was created with. The translucency flag
+is `false` outside macOS; it remains available when no live window exists,
+alongside `false` maximized/fullscreen flags. In fullscreen, the
 middle window button calls `nativeMenuAction("toggleFullScreen")` to return to
 the previous window state; otherwise it calls `window/control` with
 `toggleMaximize`.

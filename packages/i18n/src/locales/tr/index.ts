@@ -636,6 +636,7 @@ export const tr = {
     activityIncludesThinking: "Düşünmeyi içerir",
     activityFailures: "{{count}} sorun",
     activityFailures_other: "{{count}} sorun",
+    wholeTurnProcess: "Tüm işlem süreci",
     collapseProcess: "İşlemi daralt",
     collapseActivityGroup: "Etkinlik grubunu daralt",
     collapseToolOutput: "Araç çıktısını daralt",

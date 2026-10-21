@@ -627,6 +627,7 @@ export const es = {
     "activityIncludesThinking": "Incluye razonamiento",
     "activityFailures": "{{count}} problema",
     "activityFailures_other": "{{count}} problemas",
+    "wholeTurnProcess": "Proceso completo",
     "collapseProcess": "Contraer proceso",
     "collapseActivityGroup": "Contraer grupo de actividad",
     "collapseToolOutput": "Contraer salida de herramienta",

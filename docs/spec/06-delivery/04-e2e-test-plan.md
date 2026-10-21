@@ -6034,14 +6034,19 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   one unambiguously.
 - **Steps**: 1) Open sessions A, B, and C in that order, scrolling each one up a
   measured amount. 2) Switch back to A, then B, and confirm each returns to its
-  own offset. 3) Open D and then E, so A and B fall outside the retained budget.
+  own offset and still contains its already loaded latest message without a new
+  Load later messages button. 3) Open D and then E, so A and B fall outside the
+  retained budget.
   4) Return to A. 5) Return to E, then D, and confirm they are still warm. 6)
   Repeat the whole cycle once more and watch for a stuck progress track, an error
   toast, or a blank chat area.
 - **Expected**: Only the visible pane and the two most recently visited ones are
   retained; visiting beyond that budget evicts the oldest pane. A warm return
-  paints the retained frame and offset immediately. Returning to an evicted
-  session restores the message and viewport offset recorded before eviction,
+  paints the retained frame and offset immediately. An already loaded bookmark
+  reuses its continuous reading range through revalidation without an around
+  read that would discard the latest tail; canonical stream updates still apply.
+  Returning to an evicted session restores the message and viewport offset
+  recorded before eviction,
   including explicit expanded content, using a bounded historical read if the
   latest page no longer contains the anchor. The cold selection's progress track
   and composer fence remain unchanged. No search highlight is introduced, live
@@ -17224,27 +17229,43 @@ plugin-form fixtures in an isolated temporary directory at runtime.
   open a completed group and confirm the choice survives subsequent updates. Turn
   `Show thinking` off and confirm the live thinking indicator remains while
   completed reasoning rows and excerpts disappear and no empty thinking-only
-  container is left; turn it back on and confirm the completed rows return. Collapse
-  every group and confirm the Bash/run rows stay visible. Review the nested path,
+  container is left; turn it back on and confirm the completed rows return. With
+  the whole process open, collapse every inner group and confirm commands remain
+  visible. Close the whole process and confirm commands and segments disappear
+  together while the final answer stays visible. Reopen and confirm inner choices
+  are retained. Repeat with a command-only turn, an untouched active-to-completed
+  turn, a manual close followed by more commands, and a command detail explicitly
+  opened before completion. Search for a target in a closed segment and then a
+  command inside a closed whole process. Review the nested path,
   including independent group/item toggles, parent close/reopen, a singleton
   segment, literal-final-item leaf selection, failure/denial/recovery, retained-pane
   remounts, Bash rows staying standalone (including adjacent Bash rows) with their
-  details closed until opened, and a legacy search reveal.
+  details closed until opened, and a legacy search reveal. Include two process
+  chunks with recorded durations of 2s and 7s separated by a Bash command, followed
+  by a longer final answer; then update that answer again. Also observe the second
+  chunk while running under a controlled clock, then complete it.
 - **Expected:** Chronological collapsible process segments leave the final answer,
   assistant errors, stopped trailing text and pending actions outside them. The
   active group starts open; untouched groups collapse at completion, while explicit
   user choices persist. These group defaults do not depend on the `Show thinking`
-  preference. Bash/run aliases are excluded from every process disclosure and stay
-  standalone rows visible even when every group is collapsed; adjacent Bash rows
-  each remain standalone and a Bash row's detail stays closed until the user opens
-  it. When `Show thinking` is off, the live thinking indicator stays visible,
+  preference. The whole-process control starts open while active and defaults
+  closed on completion unless explicitly owned; a manual close survives later
+  streaming commands, and nested interaction preserves the open ancestor.
+  Bash/run aliases stay standalone outside inner segment/group disclosures and
+  belong to the whole process, so its control hides them together with all other
+  process content. Adjacent commands remain separate and their details stay closed
+  until opened. Each segment header keeps its own recorded duration (2s and 7s in the timing
+  fixture), including after the final answer changes; neither repeats the full
+  turn's elapsed time. Only the active chunk counts live time from its own start
+  and it settles to its recorded duration on completion. When `Show thinking` is
+  off, the live thinking indicator stays visible,
   completed reasoning rows and excerpts are hidden, and empty thinking-only
   containers are omitted; turning it back on restores them. Singletons have no
   group. No item payload opens itself: a tool/search row stays closed until the user
   opens it, while a final thinking item keeps its own leaf default.
   Parent/child/sibling states remain independent, pane-owned user choices survive
   updates, preference changes and remounts, and renderer restart reapplies defaults.
-  Search reveals the process segment and activity group that own the named message
+  Search reveals the whole process, process segment and activity group that own the named message
   once per request; item-level targeting is not part of this change, and reasoning
   hidden by the preference stays hidden until the user turns `Show thinking` on.
   Saved `showThinking` survives restart; an absent value falls back to the legacy

@@ -626,6 +626,7 @@ export const ptBR = {
     activityIncludesThinking: "Inclui raciocínio",
     activityFailures: "{{count}} problema",
     activityFailures_other: "{{count}} problemas",
+    wholeTurnProcess: "Processo completo",
     collapseProcess: "Recolher processo",
     collapseActivityGroup: "Recolher grupo de atividades",
     collapseToolOutput: "Recolher saída da ferramenta",

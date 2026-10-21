@@ -632,6 +632,7 @@ export const zhTW = {
     activityIncludesThinking: "包含思考",
     activityFailures: "{{count}} 個問題",
     activityFailures_other: "{{count}} 個問題",
+    wholeTurnProcess: "本輪處理過程",
     collapseProcess: "摺疊處理過程",
     collapseActivityGroup: "摺疊活動群組",
     collapseToolOutput: "摺疊工具輸出",
