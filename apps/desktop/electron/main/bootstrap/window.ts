@@ -36,11 +36,7 @@ import {
 import { readWindowState, writeWindowState } from "../window-preferences";
 import { suppressLinuxFramelessSystemMenu } from "../frameless-system-menu";
 import { isWindowFullScreen } from "../window-fullscreen";
-import { DEFAULT_WINDOW_CORNER_RADIUS, installWindowShape } from "../window-shape";
-import {
-  installWindows11CornerController,
-  usesWindows11NativeCorners,
-} from "../window-native-corners";
+import { installWindowsCornerController } from "../window-native-corners";
 import {
   applyMainWindowBackground,
   macosWindowSurfaceOptions,
@@ -184,10 +180,6 @@ export async function createWindow({
   const initialWindowBackground = builtinWindowBackground(
     nativeTheme.shouldUseDarkColors ? "dark" : "light",
   );
-  const windows11NativeCorners = usesWindows11NativeCorners(
-    process.platform,
-    process.getSystemVersion(),
-  );
   windowState.mainWindow = new BrowserWindow({
     ...(restoredBounds ?? { width: 1200, height: 800 }),
     minWidth: initialMinWidth,
@@ -219,11 +211,10 @@ export async function createWindow({
         }
       : {
           frame: false,
-          ...(process.platform === "win32" ? { thickFrame: false } : {}),
+          ...(process.platform === "win32" ? { thickFrame: true } : {}),
           ...mainWindowBackgroundOptions(
             process.platform,
             initialWindowBackground,
-            windows11NativeCorners,
             initialWindowBackground,
           ),
         }),
@@ -245,17 +236,13 @@ export async function createWindow({
   });
   const window = windowState.mainWindow;
   if (process.platform === "win32") {
-    if (windows11NativeCorners) {
-      await installWindows11CornerController(
-        window,
-        DEFAULT_WINDOW_CORNER_RADIUS,
-        () => windowState.host,
-        screen,
-        logger,
-      );
-    } else {
-      installWindowShape(window, DEFAULT_WINDOW_CORNER_RADIUS, screen);
-    }
+    await installWindowsCornerController(
+      window,
+      process.getSystemVersion(),
+      () => windowState.host,
+      screen,
+      logger,
+    );
   }
   // A translucent macOS window owns its transparent backing and the native
   // vibrancy material; painting the host palette here would flatten the glass
@@ -266,7 +253,6 @@ export async function createWindow({
       window,
       process.platform,
       initialWindowBackground,
-      windows11NativeCorners,
       initialWindowBackground,
     );
   }
@@ -618,11 +604,22 @@ export async function createWindow({
       fullScreen: isWindowFullScreen(window),
     });
   };
-  window.on("enter-full-screen", sendFullScreen);
+  window.on("enter-full-screen", () => {
+    setImmediate(() => {
+      if (!isLiveWindow()) return;
+      sendFullScreen();
+      sendMaximized();
+    });
+  });
   window.on("leave-full-screen", () => {
-    sendFullScreen();
-    refitWindowToWorkArea(true);
-    scheduleWorkPanelReservation();
+    // Native fullscreen state and maximized restore state settle after the event.
+    setImmediate(() => {
+      if (!isLiveWindow() || isWindowFullScreen(window)) return;
+      sendMaximized();
+      sendFullScreen();
+      refitWindowToWorkArea();
+      scheduleWorkPanelReservation();
+    });
   });
   window.webContents.on("did-finish-load", sendFullScreen);
 
@@ -638,15 +635,11 @@ export async function createWindow({
   // area — e.g. a display-scale or accessibility "text size" change inflated a
   // persisted rect past the screen (issue #544). Fit them back inside so the
   // window never lands partly off-screen. macOS keeps its own restore behavior.
-  // A `leave-full-screen` fires while the window may still report the stale
-  // maximize flag from the pre-fullscreen state (issue #1655). The refit must
-  // still run there, or the window keeps bounds sized for a display it is no
-  // longer on. Callers that legitimately sit on a maximized window (unmaximize,
-  // restore) keep the original bail-out.
-  const refitWindowToWorkArea = (ignoreMaximized = false) => {
+  // Native fullscreen owns maximized restore bounds on every Windows version.
+  const refitWindowToWorkArea = () => {
     if (!isLiveWindow() || process.platform === "darwin") return;
     if (
-      (window.isMaximized() && !ignoreMaximized) ||
+      window.isMaximized() ||
       isWindowFullScreen(window) ||
       window.isMinimized()
     ) {
@@ -741,10 +734,7 @@ export async function createWindow({
     // A scale or text-size change shrinks the DIP work area in place; re-cap the
     // minimum so the OS never enforces one the display cannot show (issue #1175).
     // Keep the open work panel's reservation in the minimum; only cap it.
-    // `isWindowFullScreen` rather than `isFullScreen`: the borderless Win32
-    // fallback leaves Electron's own flag false while the window really is
-    // fullscreen, and resizing the minimum then fights the fullscreen state
-    // (issue #1655).
+    // Do not resize constraints while Chromium owns the fullscreen bounds.
     if (isLiveWindow() && !isWindowFullScreen(window)) {
       const minimum = clampMinimumSizeToWorkArea(
         { width: workPanelMinimumWindowWidth(), height: windowMinHeight },
@@ -900,8 +890,8 @@ export async function createWindow({
       // so the reservation replan below is treated as an OS-owned adjustment.
       windowState.workPanelUserMovePending = false;
       applyWorkPanelReservation();
-      // Brief pin only when actively recovering from a shelf.
-      if (shelved || electronTiny) {
+      // Only macOS runs the watchdog that releases this temporary recovery pin.
+      if (process.platform === "darwin" && (shelved || electronTiny)) {
         window.setAlwaysOnTop(true, "floating");
         pinUntil = Date.now() + 4000;
       } else {

@@ -20,10 +20,11 @@ import {
   type WorkPanelReservationState,
 } from "../work-panel-window";
 import {
+  applyWindowCornerRadius,
   DEFAULT_WINDOW_CORNER_RADIUS,
-} from "../window-shape";
-import { applyWindowCornerRadius, usesWindows11NativeCorners } from "../window-native-corners";
+} from "../window-native-corners";
 import { applyMainWindowBackground } from "../window-background";
+import { isWindowFullScreen } from "../window-fullscreen";
 import type { IpcRegistrar } from "./types";
 
 export type WindowIpcDependencies = {
@@ -154,15 +155,10 @@ export function registerWindowIpc({
     const color = isWindowBackgroundColor(requested)
       ? requested
       : builtinWindowBackground(theme);
-    const windows11NativeCorners = usesWindows11NativeCorners(
-      process.platform,
-      process.getSystemVersion(),
-    );
     applyMainWindowBackground(
       mainWindow,
       process.platform,
       color,
-      windows11NativeCorners,
       builtinWindowBackground(theme),
     );
     const cornerRadius = process.platform === "win32"
@@ -187,7 +183,7 @@ export function registerWindowIpc({
       process.platform === "darwin" && isMacosWindowTranslucent();
     const mainWindow = getMainWindow();
     if (!mainWindow || mainWindow.isDestroyed()) {
-      return { maximized: false, macosWindowTranslucency };
+      return { maximized: false, fullScreen: false, macosWindowTranslucency };
     }
     switch (input.action as WindowControlAction) {
       case "getState":
@@ -205,6 +201,7 @@ export function registerWindowIpc({
     }
     return {
       maximized: !mainWindow.isDestroyed() && mainWindow.isMaximized(),
+      fullScreen: !mainWindow.isDestroyed() && isWindowFullScreen(mainWindow),
       // The surface this window was created with, so a Settings switch can tell
       // whether the stored preference has taken effect (#1064 / ADR 0332).
       macosWindowTranslucency,
