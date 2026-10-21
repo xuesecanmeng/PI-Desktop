@@ -5,6 +5,7 @@ import { I18nextProvider } from "react-i18next";
 import { en } from "@pi-desktop/i18n";
 import type { AppSettings, UiMessage } from "@pi-desktop/shared";
 import { AssistantTurn } from "../../apps/desktop/src/features/chat/transcript/AssistantTurn";
+import { TranscriptDisclosureProvider } from "../../apps/desktop/src/features/chat/transcript/disclosure";
 import { ShowThinkingRow } from "../../apps/desktop/src/components/settings/ShowThinkingRow";
 import { buildTranscriptEntries } from "../../apps/desktop/src/lib/assistant-turns";
 import { TranscriptSearchContext } from "../../apps/desktop/src/lib/transcript-search-context";
@@ -80,6 +81,7 @@ export async function turnProcessProbe() {
     active = false,
     search: TranscriptSearchTarget | null = null,
     key = "turn",
+    expandWhole = true,
   ) => {
     const entry = buildTranscriptEntries(messages).entries.find(
       (item) => item.kind === "assistant-turn",
@@ -89,16 +91,25 @@ export async function turnProcessProbe() {
       root.render(
         <I18nextProvider i18n={i18n}>
           <TranscriptSearchContext.Provider value={search}>
-            <AssistantTurn key={key} entry={entry} isActive={active} />
+            <TranscriptDisclosureProvider key={key} sessionId={`turn-process-probe:${key}`}>
+              <AssistantTurn entry={entry} isActive={active} />
+            </TranscriptDisclosureProvider>
           </TranscriptSearchContext.Provider>
         </I18nextProvider>,
       ),
     );
     assert(!errors.length, `React error: ${errors.map(String).join("; ")}`);
+    // Existing segment probes inspect the turn's contents after opening it.
+    // Whole-turn lifecycle probes opt out and exercise its default directly.
+    const whole = wholeHeader();
+    if (expandWhole && whole?.getAttribute("aria-expanded") === "false") click(whole);
   };
+  const wholeHeader = () => container.querySelector<HTMLButtonElement>(
+    '[data-process-scope="turn"] > button',
+  );
   const processHeaders = () =>
     [...container.querySelectorAll<HTMLButtonElement>(".turn-process > button")];
-  const firstProcess = () => container.querySelector<HTMLElement>(".turn-process-body");
+  const firstProcess = () => container.querySelector<HTMLElement>(".turn-process > .turn-process-body");
   const visible = (element: Element | null) =>
     Boolean(element?.getBoundingClientRect().height);
   const click = (element: HTMLElement | null) => {
@@ -108,7 +119,9 @@ export async function turnProcessProbe() {
   const row = (id: string) =>
     container.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
   const allCollapsed = () =>
-    [...container.querySelectorAll<HTMLElement>("[aria-expanded]")].every(
+    [...container.querySelectorAll<HTMLElement>("[aria-expanded]")].filter(
+      (element) => element !== wholeHeader(),
+    ).every(
       (element) => element.getAttribute("aria-expanded") === "false",
     );
 
@@ -138,8 +151,89 @@ export async function turnProcessProbe() {
   const mixed = [intro, read, grep, bash1, bash2, edit, answer];
 
   try {
-    // Bash has no process ancestor and stays visible with every disclosure
-    // collapsed, even across adjacent calls.
+    // The whole-turn disclosure owns all process segments and command rows.
+    // Closing it preserves every nested choice and leaves the answer reachable.
+    render(mixed, false, null, "whole-turn", false);
+    check(Boolean(wholeHeader()), "a completed turn exposes one whole-process disclosure");
+    check(wholeHeader()?.getAttribute("aria-expanded") === "false" &&
+      !visible(row("bash1")) && !visible(row("bash2")),
+    "the completed whole process starts collapsed, including both commands");
+    check(visible(row("answer")) && row("answer")?.closest('[data-process-scope="turn"]') === null,
+      "the final answer stays visible outside the collapsed whole process");
+    click(wholeHeader());
+    check(visible(row("bash1")) && visible(row("bash2")) && allCollapsed(),
+      "opening the whole process reveals commands and preserves collapsed segments");
+    click(processHeaders()[0]);
+    click(row("bash1")?.querySelector<HTMLElement>(".tool-row-header") ?? null);
+    click(wholeHeader());
+    check(!visible(row("bash1")) && !visible(firstProcess()),
+      "closing the whole process hides an expanded segment and command output together");
+    click(wholeHeader());
+    check(processHeaders()[0]?.getAttribute("aria-expanded") === "true" &&
+      processHeaders()[1]?.getAttribute("aria-expanded") === "false" &&
+      row("bash1")?.classList.contains("open") === true && visible(row("bash1")),
+    "reopening the whole process restores independent segment and command choices");
+
+    const wholeLive = [read, run("whole-live", "pwsh -Command Get-Date")];
+    render(wholeLive, true, null, "whole-lifecycle", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "true" && visible(row("whole-live")),
+      "an untouched running whole process starts open");
+    render([...wholeLive, answer], false, null, "whole-lifecycle", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "false" &&
+      !visible(row("whole-live")) && visible(row("answer")),
+    "completion collapses the untouched whole process and keeps the answer visible");
+
+    render(wholeLive, true, null, "whole-manual-close", false);
+    click(wholeHeader());
+    render([...wholeLive, run("next-command", "echo next")], true, null, "whole-manual-close", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "false" && !visible(row("next-command")),
+      "a manual whole-process close survives new streaming commands");
+
+    render(wholeLive, true, null, "whole-child-owned", false);
+    click(row("whole-live")?.querySelector<HTMLElement>(".tool-row-header") ?? null);
+    render([...wholeLive, answer], false, null, "whole-child-owned", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "true" && visible(row("whole-live")),
+      "completion preserves a whole process whose command details the user opened");
+
+    render(wholeLive, true, null, "whole-keyboard", false);
+    const commandHeader = row("whole-live")?.querySelector<HTMLButtonElement>(".tool-row-header");
+    assert(commandHeader, "missing command keyboard target");
+    flushSync(() => commandHeader.focus());
+    render([...wholeLive, answer], false, null, "whole-keyboard", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "true" && document.activeElement === commandHeader,
+      "completion preserves keyboard focus inside the whole process");
+    click(wholeHeader());
+    check(document.activeElement === wholeHeader() && !visible(row("whole-live")),
+      "manual whole-process collapse returns hidden keyboard focus to its title");
+
+    render(mixed, false, null, "whole-retained", false);
+    click(wholeHeader());
+    click(processHeaders()[0]);
+    flushSync(() => root.render(null));
+    render(mixed, false, null, "whole-retained", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "true" &&
+      processHeaders()[0]?.getAttribute("aria-expanded") === "true" &&
+      processHeaders()[1]?.getAttribute("aria-expanded") === "false",
+    "whole and segment choices survive a session pane remount independently");
+
+    render(mixed, false, null, "whole-search", false);
+    render(mixed, false, { sessionId: "s", messageId: "edit", query: "edit", requestId: 10 },
+      "whole-search", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "true" &&
+      processHeaders()[1]?.getAttribute("aria-expanded") === "true" && visible(row("edit")),
+    "search opens both the whole process and the segment that owns its target");
+    click(wholeHeader());
+    render(mixed, false, { sessionId: "s", messageId: "edit", query: "edit", requestId: 10 },
+      "whole-search", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "false",
+      "replaying the same search cannot override a manual whole-process close");
+    render(mixed, false, { sessionId: "s", messageId: "bash2", query: "pnpm", requestId: 11 },
+      "whole-search", false);
+    check(wholeHeader()?.getAttribute("aria-expanded") === "true" && visible(row("bash2")),
+      "a new command search reveals its collapsed whole process");
+
+    // Commands remain outside segment disclosures and independently expandable
+    // while the enclosing whole process is open.
     render(mixed);
     const bash1Row = row("bash1");
     const bash2Row = row("bash2");
@@ -147,7 +241,7 @@ export async function turnProcessProbe() {
     check(
       bash1Row?.closest(".turn-process") === null &&
         bash2Row?.closest(".turn-process") === null,
-      "no Bash row is inside any turn-process disclosure",
+      "no Bash row is inside a segment disclosure",
     );
     check(
       bash1Row?.closest(".turn-run-row") !== null &&
@@ -159,10 +253,10 @@ export async function turnProcessProbe() {
         bash1Row?.closest(".tool-activity-group") === null,
       "Bash rows are not folded into an activity group",
     );
-    check(allCollapsed(), "the completed process starts fully collapsed");
+    check(allCollapsed(), "the completed inner segments start fully collapsed");
     check(
       visible(bash1Row) && visible(bash2Row),
-      "Bash rows stay visible with every disclosure collapsed",
+      "Bash rows stay visible with every inner disclosure collapsed",
     );
     check(
       !visible(row("read")) && !visible(row("grep")),
@@ -178,16 +272,80 @@ export async function turnProcessProbe() {
       "a Bash row opens its own detail on request",
     );
 
-    // A turn of only Bash calls has no process disclosure at all.
-    render([run("only1", "echo 1"), run("only2", "echo 2")], false, null, "only-bash");
+    // Each process chunk owns its recorded duration even though thinking state
+    // still follows the whole turn. Bash and the final answer are not its work.
+    const timedRead = tool("timed-read", "Read", {
+      toolDurationMs: 2000,
+      toolResult: "read output",
+    });
+    const timedBash = {
+      ...run("timed-bash", "echo timing"),
+      createdAt: "2026-09-17T00:00:10.000Z",
+      toolDurationMs: 5000,
+    };
+    const timedEdit = tool("timed-edit", "Edit", {
+      createdAt: "2026-09-17T00:00:30.000Z",
+      toolDurationMs: 7000,
+      toolResult: "edit output",
+    });
+    const timedAnswer = {
+      ...answer,
+      id: "timed-answer",
+      createdAt: "2026-09-17T00:00:50.000Z",
+      responseDurationMs: 5000,
+    };
+    const timingLabels = () => processHeaders().map((header) =>
+      header.querySelector(".tool-activity-label")?.textContent);
+    const expectedTimings = ["2s", "7s"].map((time) => i18n.t("chat.processedFor", { time }));
+    render([timedRead, timedBash, timedEdit, timedAnswer], false, null, "segment-timing");
+    check(JSON.stringify(timingLabels()) === JSON.stringify(expectedTimings),
+      `process chunks show their own 2s and 7s, not the full turn: ${timingLabels()}`);
+    check(wholeHeader()?.textContent?.includes(i18n.t("chat.processedFor", { time: "55s" })),
+      "only the whole-process summary includes the final answer in its total duration");
+    render([timedRead, timedBash, timedEdit, {
+      ...timedAnswer, responseDurationMs: 25_000,
+    }], false, null, "segment-timing");
+    check(JSON.stringify(timingLabels()) === JSON.stringify(expectedTimings),
+      "a later answer update cannot change completed process chunk durations");
+    check(wholeHeader()?.textContent?.includes(i18n.t("chat.processedFor", { time: "1m 15s" })),
+      "a later answer update changes the whole total without changing segment timing");
+
+    const realNow = Date.now;
+    try {
+      Date.now = () => Date.parse("2026-09-17T00:00:35.000Z");
+      render([timedRead, timedBash, {
+        ...timedEdit, status: "streaming", toolStatus: "running", toolDurationMs: undefined,
+      }], true, null, "live-segment-timing");
+      const liveTimings = [
+        i18n.t("chat.processedFor", { time: "2s" }),
+        i18n.t("chat.processingFor", { time: "5s" }),
+      ];
+      check(JSON.stringify(timingLabels()) === JSON.stringify(liveTimings),
+        "only the active chunk counts from its own start while previous chunks stay settled");
+      render([timedRead, timedBash, timedEdit], false, null, "live-segment-timing");
+      check(JSON.stringify(timingLabels()) === JSON.stringify(expectedTimings),
+        "finishing the active chunk replaces live elapsed time with its recorded duration");
+    } finally {
+      Date.now = realNow;
+    }
+
+    // A command-only turn still has the whole-process control, with no segments.
+    render([run("only1", "echo 1"), { ...run("only2", "Get-Date"), toolName: "PowerShell" }],
+      false, null, "only-bash");
     check(
       container.querySelectorAll(".turn-process").length === 0,
-      "a Bash-only turn renders no process disclosure",
+      "a command-only turn renders no inner process segment",
     );
+    check(Boolean(wholeHeader()), "a command-only turn retains its whole-process control");
     check(
       visible(row("only1")) && visible(row("only2")),
-      "both Bash-only rows stay visible",
+      "both Bash and PowerShell rows are visible inside the opened whole process",
     );
+    click(wholeHeader());
+    check(!visible(row("only1")) && !visible(row("only2")),
+      "the whole-process control collapses Bash and PowerShell together");
+    render([answer], false, null, "answer-only", false);
+    check(!wholeHeader() && visible(row("answer")), "a plain answer has no empty whole-process control");
 
     // Active process content opens while the turn runs and closes when it stops.
     const activeTurn = [intro, read, grep];
@@ -297,7 +455,7 @@ export async function turnProcessProbe() {
     );
     render([{ ...liveThought, status: "complete" }], false, null, "thought-off-done");
     check(
-      !container.querySelector(".turn-process") && !container.querySelector(".thinking"),
+      !wholeHeader() && !container.querySelector(".turn-process") && !container.querySelector(".thinking"),
       "completed hidden thinking leaves no empty container",
     );
     check(

@@ -3344,13 +3344,15 @@
 }
 
 /* Process, activity groups and item details own independent disclosure levels. */
-.turn-process {
+.turn-process,
+.turn-process-whole {
   width: 100%;
   margin: 0 0 8px;
   min-width: 0;
 }
 
 .turn-process.open > .tool-activity-header > .tool-activity-caret,
+.turn-process-whole.open > .tool-activity-header > .tool-activity-caret,
 .process-activity-group.open > .tool-activity-header > .tool-activity-caret {
   transform: rotate(90deg);
 }
@@ -3358,6 +3360,10 @@
 .turn-process-body {
   position: relative;
   padding-left: 18px;
+}
+
+.turn-process-whole > .turn-process-body {
+  padding-left: 0;
 }
 
 .turn-process-body[hidden],

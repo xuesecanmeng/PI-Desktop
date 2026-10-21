@@ -640,6 +640,7 @@ export const en = {
     activityIncludesThinking: "Includes thinking",
     activityFailures: "{{count}} issue",
     activityFailures_other: "{{count}} issues",
+    wholeTurnProcess: "Whole turn process",
     collapseProcess: "Collapse process",
     collapseActivityGroup: "Collapse activity group",
     collapseToolOutput: "Collapse tool output",

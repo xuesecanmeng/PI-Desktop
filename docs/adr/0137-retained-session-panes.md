@@ -76,6 +76,9 @@ Three visible costs followed:
    viewport offset, window budget, and explicit disclosure choices independently
    of pane eviction or project switches. A revisit restores that message, using
    the existing bounded history read when necessary without search focus.
+   An already loaded anchor retains its entire continuous reading range through
+   selection revalidation, including the latest tail; it does not fetch a smaller
+   around page. This ordinary range continues to project canonical live updates.
    First visits still settle at the newest turn. Bookmarks hold no message
    bodies or DOM and are released on session deletion or renderer/app restart.
    Real input, explicit navigation, and a new turn cancel automatic restoration.

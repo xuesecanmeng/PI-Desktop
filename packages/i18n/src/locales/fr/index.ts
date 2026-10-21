@@ -628,6 +628,7 @@ export const fr = {
     "activityIncludesThinking": "Inclut le raisonnement",
     "activityFailures": "{{count}} problème",
     "activityFailures_other": "{{count}} problèmes",
+    "wholeTurnProcess": "Processus complet",
     "collapseProcess": "Réduire le processus",
     "collapseActivityGroup": "Réduire le groupe d'activité",
     "collapseToolOutput": "Réduire la sortie de l'outil",

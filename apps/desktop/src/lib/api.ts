@@ -1625,7 +1625,7 @@ export const api = {
       { theme, color, cornerRadius },
     ),
   windowControl: (action: WindowControlAction) =>
-    invoke<{ maximized: boolean; macosWindowTranslucency: boolean }>(
+    invoke<{ maximized: boolean; fullScreen: boolean; macosWindowTranslucency: boolean }>(
       IPC.invoke.windowControl,
       { action },
     ),

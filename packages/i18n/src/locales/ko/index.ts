@@ -637,6 +637,7 @@ export const ko = {
     activityIncludesThinking: "생각 포함",
     activityFailures: "문제 {{count}}개",
     activityFailures_other: "문제 {{count}}개",
+    wholeTurnProcess: "전체 처리 과정",
     collapseProcess: "처리 과정 접기",
     collapseActivityGroup: "활동 그룹 접기",
     collapseToolOutput: "도구 출력 접기",

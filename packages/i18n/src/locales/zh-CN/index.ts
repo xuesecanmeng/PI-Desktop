@@ -633,6 +633,7 @@ export const zhCN = {
     activityIncludesThinking: "包含思考",
     activityFailures: "{{count}} 个问题",
     activityFailures_other: "{{count}} 个问题",
+    wholeTurnProcess: "本轮处理过程",
     collapseProcess: "折叠处理过程",
     collapseActivityGroup: "折叠活动分组",
     collapseToolOutput: "折叠工具输出",

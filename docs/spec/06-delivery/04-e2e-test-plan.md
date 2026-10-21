@@ -6034,14 +6034,19 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   one unambiguously.
 - **Steps**: 1) Open sessions A, B, and C in that order, scrolling each one up a
   measured amount. 2) Switch back to A, then B, and confirm each returns to its
-  own offset. 3) Open D and then E, so A and B fall outside the retained budget.
+  own offset and still contains its already loaded latest message without a new
+  Load later messages button. 3) Open D and then E, so A and B fall outside the
+  retained budget.
   4) Return to A. 5) Return to E, then D, and confirm they are still warm. 6)
   Repeat the whole cycle once more and watch for a stuck progress track, an error
   toast, or a blank chat area.
 - **Expected**: Only the visible pane and the two most recently visited ones are
   retained; visiting beyond that budget evicts the oldest pane. A warm return
-  paints the retained frame and offset immediately. Returning to an evicted
-  session restores the message and viewport offset recorded before eviction,
+  paints the retained frame and offset immediately. An already loaded bookmark
+  reuses its continuous reading range through revalidation without an around
+  read that would discard the latest tail; canonical stream updates still apply.
+  Returning to an evicted session restores the message and viewport offset
+  recorded before eviction,
   including explicit expanded content, using a bounded historical read if the
   latest page no longer contains the anchor. The cold selection's progress track
   and composer fence remain unchanged. No search highlight is introduced, live
@@ -10489,7 +10494,26 @@ This test plan spec is accepted when:
 ### US-UI-19 Permanent Stage Manager bounds restore (macOS only)
 - On macOS with Stage Manager, shrink or unfocus the PI window until width < 800 or height < 560.
 - Expect the shell to re-assert a Codex-like footprint (~1200×800, min 800×560 capped to the display work area) and keep restoring while still collapsed (not only during the first 20s after launch).
+- If recovery temporarily enables always-on-top on macOS, confirm it remains pinned before the latest recovery's four-second deadline and, once normal bounds are restored, is cleared by the first watchdog check after that deadline; another recovery renews the deadline. On Windows/Linux, trigger bounds recovery through focus/show/restore and confirm it never enables always-on-top; normal focus and minimize/restore must not leave the window pinned either.
 - The recovery watchdog is macOS-only (D447). On Windows/Linux it must not run at all: the app must never re-layer or re-raise its own window unprompted. Focus another window, then confirm PI-Desktop stays behind it instead of jumping back to the top of the stack, and that a stacking check (`xprop -root _NET_CLIENT_LIST_STACKING`) never shows it returning to the top periodically.
+- Manual Windows acceptance: maximize PI-Desktop and use Alt+Tab in both directions; repeat after minimize/restore. Confirm the selected application is unobscured. Mocked lifecycle tests do not establish this native stacking behavior.
+  On Windows 10 and Windows 11, confirm the main window is opaque
+  (`transparent: false`), retains `thickFrame: true` (`WS_THICKFRAME`), and uses
+  authoritative native fullscreen state. From both normal and maximized
+  states, press F11 and inspect the middle button: glyph, tooltip, and
+  accessible name must all indicate Restore. Exit via that button, then repeat
+  using F11 to exit. The maximized → fullscreen → maximized journey must never
+  expose transient normal bounds or an app-driven unmaximize/maximize on either
+  leg. Verify the final native normal/maximized state matches the starting
+  state: maximized bounds stay native, while normal restore bounds are clamped
+  to `workArea` only after settled state is published. State and corner updates
+  must wait for Electron's native flags. Repeat after renderer reload while
+  fullscreen. Qualify taskbar minimize/restore before, during, and after the
+  fullscreen journey; native flags, bounds, corners, and Restore/Maximize button
+  state must remain consistent. Repeat on each display of a physical
+  dual-monitor setup with its configured taskbar/DPI layout. Windows 10/11 and
+  physical dual-monitor qualification remain pending until native evidence for
+  the tested candidate is recorded; these scenarios are not passed-result claims.
 
 ### US-UI-20 Dark floating composer box
 - Switch to dark theme on chat home.
@@ -12781,8 +12805,8 @@ This test plan spec is accepted when:
 #### E2E-167: Window edge resize stays smooth and persists the settled bounds
 
 - **Preconditions**: PI-Desktop is open in a normal, non-maximized window on
-  macOS, Windows, or Linux. On Windows, the left, bottom, and right rim must
-  have no visible native border. Run the case with the work panel closed and once
+  macOS, Windows, or Linux. Qualify Windows 10 and Windows 11 separately with an
+  opaque main window and `WS_THICKFRAME` retained. Run the case with the work panel closed and once
   with it open at a committed width.
 - **Steps**:
   1. Drag each reachable window edge and one corner slowly, including a brief
@@ -12803,30 +12827,45 @@ This test plan spec is accepted when:
      resizing. Apply authorized theme radii of 0 and 24 DIP, then return to a
      built-in theme. Radius 0 must be square. On Windows 11, positive values
      request the same system-rounded preference and are not asserted as exact
-     DIP radii; on earlier Windows builds, the existing clip retains its exact
-     DIP behavior. Reject an out-of-range radius without changing the surface.
+     DIP radii; earlier Windows builds stay rectangular for every request and
+     have no application window region. Confirm all client edges remain visible
+     without an asymmetric bright strip. Reject an out-of-range radius without
+     changing the surface.
   7. On Windows, minimize and restore the window, then confirm the selected
      corner preference is applied again. Open browser and plugin child views and
-     confirm their pixels stay within the top-level silhouette. On Windows 11,
-     also verify alpha theme colors are flattened over the built-in theme
-     background on an opaque top-level window.
+     confirm their pixels stay within the top-level silhouette. On all supported
+     Windows versions, verify alpha theme colors are flattened over the built-in
+     theme background on an opaque thick-frame main window.
+  8. Run the Windows 10/11 fullscreen qualification sequence in US-UI-19:
+     normal/maximized → F11 → exit via F11 or the middle Restore button, renderer
+     reload while fullscreen, and taskbar minimize/restore. Record native flags,
+     bounds, corner preference, and controls through each transition; qualify
+     physical dual-monitor runs separately.
 - **Expected**: Native edge and corner hit regions remain available in frameless
   chrome, the minimum size remains 800×560 (capped to the display
   work area), and the recovery watchdog does not
   compete with a slow resize stream. The renderer-owned divider updates the
   bounded panel target without changing native bounds; the last settled window
   bounds and the committed panel width reopen after relaunch. Windows uses
-  Electron's frameless native hit regions without the thick-frame rim; no left, bottom,
-  or right native rim is visible. No temporary
+  Electron's frameless native hit regions. All supported Windows versions keep
+  an opaque main window with `thickFrame: true` for native fullscreen and
+  maximized restore; record any native rim, shadow, and animation changes. No temporary
   work-panel reservation width is persisted or restored.
   Windows 11 uses DWM's native rounded preference for positive radii and a
   square preference for radius 0, maximize, and fullscreen. The default request
   remains 12 DIP and authorized themes retain the integer 0..24 DIP range, but
   DWM selects the actual positive radius and the test does not require 12 and
-  24 to look different. Its top-level surface is opaque, including when a
-  contributed alpha color is flattened over the built-in theme background.
-  Earlier Windows builds retain the existing content clip and integer shape
-  hit region. Browser/plugin child views stay within the top-level outline;
+  24 to look different. On all supported Windows versions, contributed alpha
+  colors are flattened over the built-in theme background without window
+  transparency. Earlier Windows builds use native square corners without a
+  `contentView` clip or `setShape()` region; theme radius requests are still
+  validated and acknowledged. Client pixels and native resize targets must
+  remain intact on the left, right, and bottom edges at 100%, 125%, 150%, 175%,
+  and 200% scale, after theme changes, resize, minimize/restore, and fullscreen.
+  Fullscreen uses authoritative native state with no intermediate
+  unmaximize/maximize or transient normal bounds during the maximized round
+  trip. Exit preserves native maximized bounds; normal bounds are clamped to
+  `workArea` after settled state publication. Browser/plugin child views stay within the top-level outline;
   Windows 11 corner click behavior is recorded as native system behavior and
   is not treated as `setShape()` click-through.
 - **Specs linked**: `03-runtime/01-ipc-protocol.md`,
@@ -12840,11 +12879,26 @@ This test plan spec is accepted when:
   controls in an isolated profile. The isolated `test:e2e:window-surface`
   candidate samples controlled light/dark desktop backgrounds and child-view
   bounds. Windows 11 additionally verifies the opaque DWM path and system
-  preference; earlier Windows builds verify the legacy clip and shape path.
+  preference; earlier Windows builds verify the native rectangle, absence of
+  a custom HWND region, and all four client edges. Use
+  `node scripts/e2e-window-surface.mjs --windows10-policy` to exercise the
+  Windows 10 policy on a newer Windows host; this is policy/geometry regression
+  evidence only, not Windows 10 compositor qualification.
+  Native probes run without a console window and wait for foreground focus
+  before sampling. Fullscreen coverage uses physical monitor bounds and an
+  on-screen taskbar-edge sample, including when taskbar auto-hide moves its
+  window off-screen; ordinary work-area coverage must not pass as fullscreen.
+  DWM surface checks verify the native corner preference and each corner's
+  interior/exterior pixels. Only the measured system border and its one-pixel
+  antialias fringe are excluded from application color assertions.
   Both Windows suites still require a dedicated Windows desktop; source tests
-  do not qualify native compositing.
+  do not qualify native compositing. Windows 10/11 fullscreen, taskbar, and
+  physical dual-monitor journeys require recorded native evidence for the
+  tested candidate; this catalog does not claim they have passed.
   `test:e2e:window-resize-native` adds physical Windows left/right/bottom/corner
-  drags and the 800×560 minimum; run it on a dedicated interactive desktop,
+  drags and the 800×560 DIP window minimum, measured with DWM visible bounds
+  and per-monitor DPI awareness to exclude invisible resize margins. Run it
+  on a dedicated interactive desktop,
   since another app can take foreground or pointer input during the gesture.
   Relaunch persistence remains for native qualification; macOS/Linux native
   edge behavior is unchanged.
@@ -17175,27 +17229,43 @@ plugin-form fixtures in an isolated temporary directory at runtime.
   open a completed group and confirm the choice survives subsequent updates. Turn
   `Show thinking` off and confirm the live thinking indicator remains while
   completed reasoning rows and excerpts disappear and no empty thinking-only
-  container is left; turn it back on and confirm the completed rows return. Collapse
-  every group and confirm the Bash/run rows stay visible. Review the nested path,
+  container is left; turn it back on and confirm the completed rows return. With
+  the whole process open, collapse every inner group and confirm commands remain
+  visible. Close the whole process and confirm commands and segments disappear
+  together while the final answer stays visible. Reopen and confirm inner choices
+  are retained. Repeat with a command-only turn, an untouched active-to-completed
+  turn, a manual close followed by more commands, and a command detail explicitly
+  opened before completion. Search for a target in a closed segment and then a
+  command inside a closed whole process. Review the nested path,
   including independent group/item toggles, parent close/reopen, a singleton
   segment, literal-final-item leaf selection, failure/denial/recovery, retained-pane
   remounts, Bash rows staying standalone (including adjacent Bash rows) with their
-  details closed until opened, and a legacy search reveal.
+  details closed until opened, and a legacy search reveal. Include two process
+  chunks with recorded durations of 2s and 7s separated by a Bash command, followed
+  by a longer final answer; then update that answer again. Also observe the second
+  chunk while running under a controlled clock, then complete it.
 - **Expected:** Chronological collapsible process segments leave the final answer,
   assistant errors, stopped trailing text and pending actions outside them. The
   active group starts open; untouched groups collapse at completion, while explicit
   user choices persist. These group defaults do not depend on the `Show thinking`
-  preference. Bash/run aliases are excluded from every process disclosure and stay
-  standalone rows visible even when every group is collapsed; adjacent Bash rows
-  each remain standalone and a Bash row's detail stays closed until the user opens
-  it. When `Show thinking` is off, the live thinking indicator stays visible,
+  preference. The whole-process control starts open while active and defaults
+  closed on completion unless explicitly owned; a manual close survives later
+  streaming commands, and nested interaction preserves the open ancestor.
+  Bash/run aliases stay standalone outside inner segment/group disclosures and
+  belong to the whole process, so its control hides them together with all other
+  process content. Adjacent commands remain separate and their details stay closed
+  until opened. Each segment header keeps its own recorded duration (2s and 7s in the timing
+  fixture), including after the final answer changes; neither repeats the full
+  turn's elapsed time. Only the active chunk counts live time from its own start
+  and it settles to its recorded duration on completion. When `Show thinking` is
+  off, the live thinking indicator stays visible,
   completed reasoning rows and excerpts are hidden, and empty thinking-only
   containers are omitted; turning it back on restores them. Singletons have no
   group. No item payload opens itself: a tool/search row stays closed until the user
   opens it, while a final thinking item keeps its own leaf default.
   Parent/child/sibling states remain independent, pane-owned user choices survive
   updates, preference changes and remounts, and renderer restart reapplies defaults.
-  Search reveals the process segment and activity group that own the named message
+  Search reveals the whole process, process segment and activity group that own the named message
   once per request; item-level targeting is not part of this change, and reasoning
   hidden by the preference stays hidden until the user turns `Show thinking` on.
   Saved `showThinking` survives restart; an absent value falls back to the legacy

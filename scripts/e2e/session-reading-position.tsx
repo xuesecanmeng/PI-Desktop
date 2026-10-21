@@ -116,6 +116,10 @@ globalThis.sessionReadingPositionProbe = async () => {
     await select("A");
     await until(() => Boolean(row(id)) && Math.abs(offset(id) - expectedOffset) < 2,
       "warm production pane preserves reading through revalidation");
+    assert(Boolean(row("real-m139")), "warm restoration discarded the already loaded latest message");
+    assert(!host.querySelector('[data-visible="true"] .transcript-load-later'),
+      "warm restoration must not replace the latest tail with Load later messages");
+    assert(aroundReads.length === 0, "a retained reading anchor must not fetch a smaller historical range");
     for (const id of ["B", "C", "D", "E"]) await select(id);
     assert(!host.querySelector('[data-session-pane="real-A"]'), "A was not evicted");
     await select("A");
