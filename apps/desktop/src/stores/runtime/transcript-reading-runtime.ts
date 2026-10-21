@@ -70,8 +70,14 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
       if (signal.aborted || get().activeSessionId !== sessionId || !position.messageId) return false;
       const previous = get().transcriptViews[sessionId];
       const range = currentView(sessionId);
-      if (get().selectingSessionId !== sessionId &&
-        range.messages.some((message) => message.id === position.messageId)) return true;
+      if (range.messages.some((message) => message.id === position.messageId)) {
+        // A warm selection already owns a continuous range through the latest
+        // tail. Retain it across latest-page revalidation instead of replacing
+        // it with a smaller around page. Ordinary projection keeps live rows
+        // authoritative and does not enter historical/search mode.
+        if (!previous && get().selectingSessionId === sessionId) publish(sessionId, range);
+        return true;
+      }
       // A user navigation already in flight always wins over automatic restore.
       if (range.focus || range.loading) return false;
       const pending: TranscriptView = { ...range, restored: true, loading: "target" };
@@ -197,7 +203,7 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
         previous.activeSessionId === id &&
         !state.runningSessions[id] &&
         !previous.runningSessions[id] &&
-        !(view.restored && previous.selectingSessionId === id) &&
+        !(previous.selectingSessionId === id && !view.focus) &&
         state.messages !== previous.messages &&
         transcriptWasRewritten(previous.messages, state.messages);
       if (evicted || started || rewritten) returnToLatestTranscript(id);

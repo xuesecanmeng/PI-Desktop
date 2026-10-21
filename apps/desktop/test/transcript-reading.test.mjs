@@ -521,6 +521,52 @@ test("a loaded reading anchor does not fetch or replace the existing reading ran
   assert.equal(r.view(), undefined);
 });
 
+test("a warm selection preserves its loaded anchor and latest messages through revalidation", async () => {
+  let reads = 0;
+  const loaded = [message("old"), message("middle"), message("tail")];
+  const r = reader(async () => {
+    reads += 1;
+    return page([message("old")]);
+  }, { messages: loaded, selectingSessionId: "s" });
+
+  assert.equal(await r.restoreTranscriptReading("s", bookmark, new AbortController().signal), true);
+  assert.deepEqual(r.visible().map((row) => row.id), ["old", "middle", "tail"]);
+  assert.equal(r.view()?.hasMoreAfter ?? false, false);
+  assert.equal(reads, 0, "an already loaded bookmark must not replace the latest tail with an around page");
+
+  r.set({ messages: [message("tail")], selectingSessionId: undefined });
+  assert.deepEqual(r.visible().map((row) => row.id), ["old", "middle", "tail"]);
+  assert.equal(r.view().focus, null);
+  r.returnToLatestTranscript("s");
+  assert.deepEqual(r.visible().map((row) => row.id), ["tail"]);
+});
+
+test("a retained warm reading range keeps receiving the canonical streaming tail", async () => {
+  const tail = message("tail", "partial", { role: "assistant", status: "streaming" });
+  const r = reader(async () => { throw new Error("unexpected read"); }, {
+    messages: [message("old"), tail], selectingSessionId: "s", runningSessions: { s: true },
+  });
+  await r.restoreTranscriptReading("s", bookmark, new AbortController().signal);
+  r.set({ messages: [tail], selectingSessionId: undefined });
+  const complete = { ...tail, content: "complete answer", status: "complete" };
+  r.set({ messages: upsertLiveSessionMessage(r.get().messages, complete) });
+  assert.deepEqual(r.visible().map((row) => row.id), ["old", "tail"]);
+  assert.equal(r.visible().at(-1), complete);
+  assert.equal(Boolean(r.view().restored || r.view().focus), false);
+});
+
+test("a canonical rewrite still releases a warm range after selection revalidation", async () => {
+  const r = reader(async () => { throw new Error("unexpected read"); }, {
+    messages: [message("old"), message("tail")], selectingSessionId: "s",
+  });
+  await r.restoreTranscriptReading("s", bookmark, new AbortController().signal);
+  r.set({ messages: [message("tail")], selectingSessionId: undefined });
+  assert.equal(r.visible()[0].id, "old");
+  r.set({ messages: [message("tail", "edited answer")] });
+  assert.equal(r.view(), undefined);
+  assert.equal(r.visible()[0].content, "edited answer");
+});
+
 test("input cancellation prevents a delayed restoration from replacing the current view", async () => {
   const pending = deferred();
   const r = reader(() => pending.promise);
