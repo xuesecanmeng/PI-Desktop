@@ -1282,7 +1282,7 @@ row 而不是在转录本中添加树镶边。
   内容宽度。该 Markdown 里的工作区文件路径可预览：行内代码、Markdown 链接与裸路径
   token（带已知扩展名）都像芯片一样，在打开项目的每个文件夹里先补全再打开（ADR 0263）——
   解析到的文件在随应用打包的 `pi.file-manager` 视图中打开（没有该视图时退回宿主 `file:`
-  选项卡），主文件夹中的 `.html`/`.htm` 在侧边浏览器打开，什么都没匹配到时不开任何东西
+  选项卡）。HTML follows the unified file preference; its Open with submenu retains explicit browser choices. 什么都没匹配到时不开任何东西
   并自己报告出来。
   本地 Markdown 图片经同一受限 data-URL 通道内联显示，无法解析时回退为芯片。
 - 思考：答案上方单独轻量披露，无卡
@@ -2390,8 +2390,18 @@ Live Voice 受现有开发者模式和开发构建门控约束，包含四种展
   切换会话或项目、删除正在查看的附件时关闭预览；晚到的读取结果不得覆盖新图片。
 - 发送的模板调用在记录中呈现为等宽命令
   来自消息的 `command` 字段的芯片而不是扩展的正文。
-- 已发送的 `@path` 文件引用（带引号或不带引号）画成与草稿相同的叶子名芯片。点击芯片先经 `pi-desktop/fs/resolveRef` 补全引用——搜索整个打开的项目，按项目组文件夹顺序、主文件夹优先（ADR 0263）——再按解析结果打开：项目文件在随应用打包的 `pi.file-manager` 视图中打开（该视图不可用时退回宿主 `file:` 选项卡），会话临时目录或附件文件在宿主 `file:` 选项卡中打开，主文件夹中的 `.html`/`.htm` 在侧边浏览器打开。交给该视图的地址跟随应答的文件夹：主文件夹中的文件用项目内相对路径传递，同一项目的同级文件夹中的文件用绝对路径传递，与会话临时目录和附件文件一致。什么都没匹配到时既不打开任何东西，也会自己报告出来，右键该芯片也一样；引用菜单除了在系统文件管理器中显示该文件，还提供复制完整地址与复制相对地址，发送的 `@path` 芯片、消息 Markdown 中的行内代码、本地链接与本地图片、工具行自己的文件路径、工具结果的文件列表或匹配列表中的路径、图片附件缩略图都提供同样的几项，并同样经这次补全与这套寻址规则；项目外的文件没有相对地址，会直接说明。系统默认应用不再由这次点击触发。HTTP(S) URL 仍是侧边浏览器的文本链接。
-带行号的 `path:line` 引用使用宿主只读 `file:` 选项卡，并将目标行滚动到可见区域。
+- Sent `@path` references resolve through Main before opening. One
+  `fileOpenTarget` preference covers every file, including HTML, and directories.
+  Built-in project files open in File Manager, scratch/attachment files in the
+  host viewer, and directories in the host Files tree. System mode uses the OS
+  default application or system file manager. Positioned source links retain
+  line navigation. HTML retains Open with → File Manager / built-in browser /
+  default browser as a single-click override. Local reference menus also offer
+  Open in VS Code, Copy full path, Copy relative path and Open in File Explorer.
+  Explorer selects files or opens directory contents. All actions use the same
+  resolved canonical path; missing/restricted paths open nothing. Remote
+  workspace references keep copy actions without native application actions.
+  HTTP(S) links retain their separate destination preference and context menu.
 
 - 状态：键盘活动行使用共享 `kb-active` 处理；空的
   查询列出所有内容（斜杠）/最近索引的顺序（文件）；零
@@ -3058,3 +3068,8 @@ default nor provider configuration. OAuth accounts remain in their separate sect
 
 项目删除说明和插件弹窗标题、安装结果中的长名称也在现有宽度内换行。
 项目指令、项目记忆和 OAuth 弹窗维持已有的边界处理。
+
+Only an existing regular HTML file confirmed by Main gains the HTML Open with
+submenu. HTML-named directories, directory aliases and missing references keep
+generic actions. Deferred metadata never revives dismissed menus, replaces newer
+requests or crosses session/project changes; keyboard focus is preserved.

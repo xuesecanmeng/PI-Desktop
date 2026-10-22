@@ -56,10 +56,8 @@ test("a file chip is routed by where the reference resolved, never optimisticall
     hook,
     /path: primary && !isolated \? match\.relativePath : match\.absolutePath/,
   );
-  // Project and scratch HTML run at the exact path resolved by main.
-  assert.match(hook, /resolved\.inProject \|\| resolved\.scratch/);
-  assert.match(hook, /isHtmlFilePath\(resolved\.absolutePath\)/);
-  assert.match(hook, /openUrl\(resolved\.absolutePath\)/);
+  // HTML shares ordinary file routing; browser preview remains an explicit tool.
+  assert.doesNotMatch(hook, /isHtmlFilePath|htmlOpenTarget/);
   // Plain project files prefer the bundled file view. A path:line reference
   // uses the host file tab because the bundled view has no line-navigation API.
   assert.match(hook, /FILE_MANAGER_PLUGIN_TAB/);
@@ -75,7 +73,6 @@ test("a file chip is routed by where the reference resolved, never optimisticall
   assert.match(hook, /isActiveInProject\(/);
   assert.doesNotMatch(hook, /const pluginViews = useAppStore\(\(s\) => s\.pluginViews\)/);
   assert.match(hook, /const hasPosition = line !== undefined \|\| column !== undefined/);
-  assert.match(hook, /!hasPosition[\s\S]*?isHtmlFilePath/);
   assert.match(hook, /!hasPosition[\s\S]*?ensureFileManagerView/);
   assert.match(hook, /fileManagerPluginTab\(resolved\.path\)/);
   assert.match(filesTab, /data-line=\{i \+ 1\}/);
@@ -88,23 +85,11 @@ test("a file chip is routed by where the reference resolved, never optimisticall
   // roots, and positioned references need the host viewer's line navigation.
   assert.match(hook, /inProject: false/);
   assert.match(hook, /openFile\(resolved\.path, mimeType, \{ line, column \}\)/);
-  // Only the explicit default-browser destination may request the OS handoff;
-  // an ordinary transcript click keeps its resolved in-app destination.
-  const defaultBrowserIndex = hook.indexOf(
-    'if (destination === "default-browser")',
-  );
-  const defaultBrowserBranch = hook.slice(
-    defaultBrowserIndex,
-    hook.indexOf("const hasPosition", defaultBrowserIndex),
-  );
-  assert.match(
-    defaultBrowserBranch,
-    /await api\.fsOpen\(resolved\.absolutePath, mimeType, sessionId\)/,
-  );
-  assert.doesNotMatch(
-    hook.slice(0, defaultBrowserIndex),
-    /api\.fsOpen\(/,
-  );
+  // Native actions and the system preference are handled only after resolution.
+  assert.match(hook, /explicitDestination \|\| current\.settings\?\.fileOpenTarget === "external"/);
+  assert.match(hook, /await api\.fsOpen\(resolved\.absolutePath, mimeType, sessionId\)/);
+  assert.match(hook, /await api\.fsOpenInVSCode\(resolved\.absolutePath, sessionId\)/);
+  assert.match(hook, /await api\.fsReveal\(resolved\.absolutePath, sessionId\)/);
   assert.match(
     api,
     /fsOpen: \(path: string, mimeType\?: string, sessionId\?: string\) =>\s*invoke\(IPC\.invoke\.fsOpen, \{ path, mimeType, \.\.\.\(sessionId \? \{ sessionId \} : \{\}\) \}\)/,

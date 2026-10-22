@@ -113,6 +113,8 @@ export const SETTINGS_NAV: SettingsNavEntry[] = [
       "settings.mode",
       "settings.commandShell",
       "settings.linkOpenTarget",
+      "settings.fileOpenTarget",
+      "settings.fileOpenTargetDesc",
       "settings.enterToSend",
       "settings.infiniteProviderRetry",
       "settings.infiniteProviderRetryDesc",

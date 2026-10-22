@@ -189,10 +189,20 @@ async function isRegularFile(target: string): Promise<boolean> {
   }
 }
 
+async function exactPathKind(target: string, allowDirectories: boolean): Promise<"file" | "directory" | null> {
+  try {
+    const info = await stat(target);
+    if (info.isFile()) return "file";
+    return allowDirectories && info.isDirectory() ? "directory" : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Root-relative POSIX path, or null when `absolute` is outside `rootPath`. */
 function relativeInside(rootPath: string, absolute: string): string | null {
   const rel = relative(rootPath, absolute);
-  if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     return null;
   }
   return toPosix(rel);
@@ -367,12 +377,13 @@ async function listRootFiles(
 }
 
 /**
- * Resolve one chat file reference to the best existing file, or null when
- * nothing matches. Never throws: an unreadable root is simply not a match.
+ * Resolve a chat reference to a file, or an opted-in exact directory. Returns
+ * null when nothing matches; an unreadable root is simply not a match.
  */
 export async function resolveChatFileRef(
   ref: string,
   roots: ChatRefRoots,
+  { allowDirectories = false }: { allowDirectories?: boolean } = {},
 ): Promise<FsChatRefMatch | null> {
   const parsed = parseChatRef(ref);
   if (!parsed) return null;
@@ -400,15 +411,17 @@ export async function resolveChatFileRef(
     } catch {
       return null;
     }
-    if (!(await isRegularFile(targetPath))) return null;
+    const kind = await exactPathKind(targetPath, allowDirectories);
+    if (!kind) return null;
     for (const root of canonicalRootList) {
       const relativePath = root.realPath ? relativeInside(root.realPath, targetPath) : null;
-      if (!relativePath) continue;
+      if (relativePath === null) continue;
       return {
         root: root.kind,
         relativePath,
         absolutePath,
         matchedBy: "exact-absolute",
+        ...(kind === "directory" ? { isDirectory: true as const } : {}),
         ...(root.sessionScratch ? { sessionScratch: true } : {}),
         ...(root.projectRoot ? { projectRoot: root.projectRoot } : {}),
       };
@@ -451,13 +464,16 @@ export async function resolveChatFileRef(
   }
   for (const root of rootList) {
     const absolutePath = join(root.path, ...parsed.segments);
-    if (await isRegularFile(absolutePath)) {
-      if (!(await isContainedRegularFile(root.path, parsed.segments.join("/")))) return null;
+    const kind = await exactPathKind(absolutePath, allowDirectories);
+    if (kind) {
+      const realPath = await resolveRealPathWithinRoot(root.path, parsed.segments.join("/"));
+      if (!realPath || await exactPathKind(realPath, allowDirectories) !== kind) return null;
       return {
         root: root.kind,
         relativePath: parsed.segments.join("/"),
         absolutePath,
         matchedBy: "exact-relative",
+        ...(kind === "directory" ? { isDirectory: true as const } : {}),
         ...(root.sessionScratch ? { sessionScratch: true } : {}),
         ...(root.projectRoot ? { projectRoot: root.projectRoot } : {}),
       };

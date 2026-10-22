@@ -1,7 +1,7 @@
 /**
  * A file the conversation already recognised is a file the user can act on.
  *
- * HTML references have explicit open destinations in their context menu. Each
+ * File and directory references offer explicit native destinations. Each
  * destination goes through the same completion as a click, so a shorthand that
  * resolves to nothing cannot open a different file (ADR 0262/0263).
  *
@@ -48,6 +48,8 @@ const calls = {
   files: [],
   urls: [],
   defaultBrowsers: [],
+  vscode: [],
+  reveals: [],
   toasts: [],
   resolved: [],
   menus: [],
@@ -76,6 +78,8 @@ const useAppStore = Object.assign(
 
 let nextMatch = null;
 let clipboardFails = false;
+let defaultOpenFails = false;
+let lookupFails = false;
 const copied = [];
 
 /*
@@ -109,10 +113,21 @@ const previewTarget = loadModule("../src/hooks/use-preview-target.ts", {
   "../lib/api": {
     api: {
       listPluginViews: async () => state.pluginViews,
-      fsOpen: async (path, mimeType, sessionId) =>
-        calls.defaultBrowsers.push([path, mimeType, sessionId]),
+      fsOpen: async (path, mimeType, sessionId) => {
+        calls.defaultBrowsers.push([path, mimeType, sessionId]);
+        if (defaultOpenFails) throw new Error("OS association failed");
+      },
+      fsOpenInVSCode: async (path, sessionId) => {
+        calls.vscode.push([path, sessionId]);
+        if (defaultOpenFails) throw new Error("VS Code unavailable");
+      },
+      fsReveal: async (path, sessionId) => {
+        calls.reveals.push([path, sessionId]);
+        if (defaultOpenFails) throw new Error("Explorer unavailable");
+      },
       fsResolveRef: async (ref) => {
         calls.resolved.push(ref);
+        if (lookupFails) throw new Error("metadata lookup unavailable");
         return { match: nextMatch };
       },
     },
@@ -146,6 +161,7 @@ const { useChatFileMenu, useChatFileMenuItems } = loadModule(
       IconExternal: () => null,
       IconFolderOpen: () => null,
       IconGlobe: () => null,
+      IconVSCode: () => null,
     },
     "../lib/chat-links": {
       isHtmlFilePath: (path) => /\.html?$/i.test(path),
@@ -153,7 +169,10 @@ const { useChatFileMenu, useChatFileMenuItems } = loadModule(
     "../components/ContextMenu": {
       useContextMenu: () => ({
         contextMenu: null,
-        openContextMenu: (_event, request) => calls.menus.push(request),
+        openContextMenu: (_event, request) => {
+          calls.menus.push(request);
+          return (items) => { request.items = items; };
+        },
         closeContextMenu: () => {},
       }),
     },
@@ -168,6 +187,9 @@ function reset(match) {
   Object.values(calls).forEach((list) => list.splice(0, list.length));
   nextMatch = match;
   clipboardFails = false;
+  defaultOpenFails = false;
+  lookupFails = false;
+  state.settings = {};
 }
 
 /** The match the main process reports for a file of the project's main folder. */
@@ -187,7 +209,7 @@ function projectMatch(overrides = {}) {
  * right-click would have offered. Both run inside a render, so no side effect
  * fires while React is rendering.
  */
-async function openWithDestination(path, destination) {
+async function openReference(path, destination) {
   let open = null;
   function Harness() {
     open = previewTarget.useOpenChatFileRef();
@@ -199,85 +221,192 @@ async function openWithDestination(path, destination) {
   await flush();
 }
 
-test("the HTML menu exposes three open destinations as one submenu", () => {
-  reset(projectMatch());
-  let openFileMenu = null;
-  function Harness() {
-    openFileMenu = useChatFileMenu().openFileMenu;
-    return null;
+test("ordinary files and HTML share the file preference and built-in File Manager", async () => {
+  for (const name of ["a.ts", "page.HTML", "page.htm"]) {
+    reset(projectMatch({ relativePath: name, absolutePath: `C:/project/${name}` }));
+    state.settings = { fileOpenTarget: "workpanel", htmlOpenTarget: "external" };
+    await openReference(name);
+    assert.equal(calls.tabs[0]?.resource, "pi.file-manager/manager");
+    assert.equal(calls.tabs[0]?.location, name);
+    assert.deepEqual(calls.urls, []);
+    assert.deepEqual(calls.defaultBrowsers, []);
+
+    reset(projectMatch({ relativePath: name, absolutePath: `C:/project/${name}` }));
+    state.settings = { fileOpenTarget: "external", htmlOpenTarget: "workpanel" };
+    await openReference(name);
+    assert.deepEqual(calls.defaultBrowsers, [[`C:/project/${name}`, undefined, "session-1"]]);
+    assert.deepEqual(calls.tabs, []);
   }
-  renderToStaticMarkup(React.createElement(Harness));
-  openFileMenu({}, { path: "src/dir/a.html" });
-  const menu = calls.menus[0].items;
-  assert.deepEqual(menu.map((item) => item.id), [
-    "open-with",
-    "copy-full-path",
-    "copy-relative-path",
-  ]);
-  assert.equal(menu[0].label, "chat.openWith:");
-  assert.deepEqual(
-    menu[0].submenu.map((item) => [item.id, item.label]),
-    [
-      ["open-with-file-manager", "chat.openWithFileManager:"],
-      ["open-with-built-in-browser", "chat.openWithBuiltInBrowser:"],
-      ["open-with-default-browser", "chat.openWithDefaultBrowser:"],
-    ],
-  );
-  assert.equal(menu.some((item) => item.id === "reveal-in-folder"), false);
 });
 
-test("non-HTML references keep copy actions without an open-with submenu", () => {
+test("directories follow the file preference even when their name ends in HTML", async () => {
+  const match = projectMatch({ isDirectory: true, relativePath: "outputs.html", absolutePath: "C:/project/outputs.html" });
+  reset(match);
+  state.settings = { fileOpenTarget: "workpanel" };
+  await openReference("outputs.html");
+  assert.deepEqual(calls.files, [["C:/project/outputs.html", undefined, { isDirectory: true }]]);
+  assert.deepEqual(calls.defaultBrowsers, []);
+  await openReference("outputs.html", "file-manager");
+  assert.deepEqual(calls.files[1], ["C:/project/outputs.html", undefined, { isDirectory: true }]);
+  assert.deepEqual(calls.tabs, []);
+
+  reset(match);
+  state.settings = { fileOpenTarget: "external" };
+  await openReference("outputs.html");
+  assert.deepEqual(calls.defaultBrowsers, [["C:/project/outputs.html", undefined, "session-1"]]);
+  assert.deepEqual(calls.urls, []);
+});
+
+test("a failed system handoff reports the failure without opening an in-app fallback", async () => {
   reset(projectMatch());
-  let openFileMenu = null;
-  function Harness() {
-    openFileMenu = useChatFileMenu().openFileMenu;
-    return null;
-  }
-  renderToStaticMarkup(React.createElement(Harness));
-  openFileMenu({}, { path: "src/dir/a.ts" });
-  assert.deepEqual(calls.menus[0].items.map((item) => item.id), [
-    "copy-full-path",
-    "copy-relative-path",
-  ]);
-});
-
-test("the File Manager opens the resolved project or scratch path", async () => {
-  reset(projectMatch({ relativePath: "page.html", absolutePath: "C:/project/page.html" }));
-  await openWithDestination("page.html", "file-manager");
-  assert.deepEqual(calls.resolved, ["page.html"]);
-  assert.equal(calls.tabs[0].location, "page.html");
-
-  reset({
-    root: "scratch",
-    relativePath: "page.html",
-    absolutePath: "C:/data/scratch/session-1/page.html",
-    matchedBy: "exact-relative",
-  });
-  await openWithDestination("page.html", "file-manager");
-  assert.equal(calls.tabs[0].location, "C:/data/scratch/session-1/page.html");
-});
-
-test("HTML can open in the embedded or default browser at its resolved address", async () => {
-  reset(projectMatch({ relativePath: "page.html", absolutePath: "C:/project/page.html" }));
-  await openWithDestination("page.html", "built-in-browser");
-  assert.deepEqual(calls.urls, [["C:/project/page.html"]]);
-
-  await openWithDestination("page.html", "default-browser");
-  assert.deepEqual(calls.defaultBrowsers, [
-    ["C:/project/page.html", undefined, "session-1"],
-  ]);
-});
-
-test("an unresolved HTML reference is reported and opened nowhere", async () => {
-  reset(null);
-  await openWithDestination("missing.html", "built-in-browser");
+  state.settings = { fileOpenTarget: "external" };
+  defaultOpenFails = true;
+  await openReference("a.ts");
   assert.deepEqual(calls.tabs, []);
   assert.deepEqual(calls.files, []);
-  assert.deepEqual(calls.urls, []);
+  assert.deepEqual(calls.toasts.map(([message]) => message), ["chat.defaultApplicationOpenFailed:"]);
+});
+
+test("local file menus add VS Code and Explorer while retaining the real HTML file submenu", async () => {
+  for (const path of ["src/dir/a.ts", "page.html", "outputs", "folder.html", "folder.HTM"]) {
+    const directory = path === "outputs" || path.startsWith("folder.");
+    reset(projectMatch({ relativePath: path, absolutePath: `C:/project/${path}`, ...(directory ? { isDirectory: true } : {}) }));
+    let openFileMenu;
+    function Harness() { openFileMenu = useChatFileMenu().openFileMenu; return null; }
+    renderToStaticMarkup(React.createElement(Harness));
+    openFileMenu({}, { path });
+    await flush();
+    const items = calls.menus[0].items;
+    const html = !directory && /\.html?$/i.test(path);
+    assert.deepEqual(items.map(item => [item.id, item.label]), [
+      ["open-in-vscode", "chat.openInVSCode:"],
+      ...(html ? [["open-with", "chat.openWith:"]] : []),
+      ["copy-full-path", "chat.copyFullPath:"],
+      ["copy-relative-path", "chat.copyRelativePath:"],
+      ["reveal-in-folder", "chat.openInFileExplorer:"],
+    ]);
+    if (html) {
+      assert.deepEqual(items.find(item => item.id === "open-with").submenu.map(item => item.id), [
+        "open-with-file-manager", "open-with-built-in-browser", "open-with-default-browser",
+      ]);
+    } else assert.ok(items.every(item => !item.submenu));
+  }
+});
+
+test("HTML inspection keeps generic actions on missing files and reports unexpected lookup failures in diagnostics", async () => {
+  const previousWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args);
+  try {
+    for (const failure of [false, true]) {
+      reset(null);
+      lookupFails = failure;
+      let openFileMenu;
+      function Harness() { openFileMenu = useChatFileMenu().openFileMenu; return null; }
+      renderToStaticMarkup(React.createElement(Harness));
+      openFileMenu({}, { path: "missing.html" });
+      await flush();
+      assert.deepEqual(calls.menus[0].items.map(item => item.id), [
+        "open-in-vscode", "copy-full-path", "copy-relative-path", "reveal-in-folder",
+      ]);
+      assert.deepEqual(calls.toasts, [], "passive inspection does not toast an error");
+    }
+    assert.equal(warnings.length, 1, "unexpected lookup failure remains diagnosable");
+    assert.equal(warnings[0][0], "File-reference metadata lookup failed");
+  } finally { console.warn = previousWarn; }
+});
+
+async function selectFileAction(path, id) {
+  let items;
+  function Harness() { items = useChatFileMenuItems()({ path }); return null; }
+  renderToStaticMarkup(React.createElement(Harness));
+  const item = items.find(item => item.id === id);
+  assert.ok(item, `missing file action: ${id}`);
+  item.onSelect();
+  await flush();
+}
+
+test("native menu actions resolve the actual file or directory and override its preference", async () => {
+  for (const isDirectory of [false, true]) {
+    reset(projectMatch({ ...(isDirectory ? { isDirectory: true } : {}) }));
+    state.settings = { fileOpenTarget: "workpanel" };
+    await selectFileAction("a.ts", "open-in-vscode");
+    await selectFileAction("a.ts", "reveal-in-folder");
+    assert.deepEqual(calls.vscode, [["C:/project/src/dir/a.ts", "session-1"]]);
+    assert.deepEqual(calls.reveals, [["C:/project/src/dir/a.ts", "session-1"]]);
+    assert.deepEqual(calls.tabs, []);
+    assert.deepEqual(calls.files, []);
+    assert.deepEqual(calls.defaultBrowsers, []);
+  }
+});
+
+test("native actions fail visibly and never fall back to another destination", async () => {
+  for (const [destination, message] of [["vscode", "chat.vscodeOpenFailed:"], ["file-explorer", "chat.fileExplorerOpenFailed:"]]) {
+    reset(projectMatch());
+    defaultOpenFails = true;
+    await openReference("a.ts", destination);
+    assert.deepEqual(calls.toasts.map(([message]) => message), [message]);
+    assert.deepEqual(calls.tabs, []);
+    assert.deepEqual(calls.files, []);
+    assert.deepEqual(calls.defaultBrowsers, []);
+  }
+});
+
+test("missing and remote paths cannot reach any native destination", async () => {
+  for (const destination of [undefined, "vscode", "file-explorer"]) {
+    reset(null);
+    state.settings = { fileOpenTarget: "external" };
+    await openReference("missing.pdf", destination);
+    assert.deepEqual(calls.defaultBrowsers, []);
+    assert.deepEqual(calls.vscode, []);
+    assert.deepEqual(calls.reveals, []);
+    assert.deepEqual(calls.toasts.map(([message]) => message), ["chat.fileRefMissing:missing.pdf"]);
+
+    reset(projectMatch());
+    state.settings = { fileOpenTarget: "external" };
+    const previous = state.workspace;
+    state.workspace = { ...previous, remote: { hostKey: "fixture" } };
+    try {
+      await openReference("a.ts", destination);
+      assert.deepEqual(calls.defaultBrowsers, []);
+      assert.deepEqual(calls.vscode, []);
+      assert.deepEqual(calls.reveals, []);
+      assert.equal(calls.toasts.length, 1);
+    } finally { state.workspace = previous; }
+  }
+});
+
+test("HTML Open with overrides the unified preference for that click", async () => {
+  const match = projectMatch({ relativePath: "page.html", absolutePath: "C:/project/page.html" });
+  reset(match);
+  state.settings = { fileOpenTarget: "external" };
+  await openReference("page.html", "file-manager");
+  assert.equal(calls.tabs[0]?.location, "page.html");
   assert.deepEqual(calls.defaultBrowsers, []);
-  assert.deepEqual(calls.toasts.map(([message]) => message), [
-    "chat.fileRefMissing:missing.html",
-  ]);
+  await openReference("page.html", "built-in-browser");
+  assert.deepEqual(calls.urls, [["C:/project/page.html"]]);
+  state.settings = { fileOpenTarget: "workpanel" };
+  await openReference("page.html", "default-browser");
+  assert.deepEqual(calls.defaultBrowsers, [["C:/project/page.html", undefined, "session-1"]]);
+
+  reset({ root: "scratch", absolutePath: "C:/data/scratch/session-1/page.html", relativePath: "page.html" });
+  await openReference("page.html", "file-manager");
+  assert.equal(calls.tabs[0]?.location, "C:/data/scratch/session-1/page.html");
+});
+
+test("the HTML browser destination refuses a directory or unavailable browser", async () => {
+  reset(projectMatch({ isDirectory: true }));
+  await openReference("folder.html", "built-in-browser");
+  assert.deepEqual(calls.urls, []);
+  assert.deepEqual(calls.toasts.map(([message]) => message), ["chat.builtInBrowserUnavailable:"]);
+  const previous = state.pluginViews;
+  state.pluginViews = [];
+  try {
+    reset(projectMatch());
+    await openReference("page.html", "built-in-browser");
+    assert.deepEqual(calls.urls, []);
+    assert.deepEqual(calls.toasts.map(([message]) => message), ["chat.builtInBrowserUnavailable:"]);
+  } finally { state.pluginViews = previous; }
 });
 
 /** Run one copy item of the reference menu on the reference it names. */
@@ -385,7 +514,7 @@ test("every transcript surface that names a file opens that item", () => {
   assert.match(toolDetails, /openFileMenu\(event, \{ path: rel \}\)/);
   // Markdown owns one surface for its whole tree, because its blocks are
   // memoized and the references are spread across them.
-  assert.match(markdown, /const fileMenuItems = useChatFileMenuItems\(\)/);
+  assert.match(markdown, /openFileMenu: openMarkdownFileMenu,[\s\S]*?useChatFileMenu\(\)/);
   assert.match(
     markdown,
     /<MarkdownFileMenuContext\.Provider value=\{openMarkdownFileMenu\}>/,
@@ -405,30 +534,23 @@ test("every transcript surface that names a file opens that item", () => {
   );
 });
 
-test("HTTP URLs keep their own menu instead of the file open submenu", () => {
+test("HTTP URLs keep their existing external/work-panel/copy menu", () => {
   const menu = read("../src/hooks/use-chat-file-menu.tsx");
-  // The submenu only recognizes HTML paths, and an HTTP link keeps its own
-  // external/work-panel/copy menu.
-  assert.match(menu, /isHtmlFilePath\(path\)/);
-  assert.doesNotMatch(menu, /useRevealChatFileRef|reveal-in-folder/);
+  assert.match(menu, /resolved && !resolved\.isDirectory && isHtmlFilePath\(resolved\.absolutePath\)/);
   assert.ok(markdown.includes('if (!/^https?:\\/\\//i.test(href)) {'));
 });
 
 test("the reference labels ship in the catalogs the menu reads", () => {
   const en = read("../../../packages/i18n/src/locales/en/index.ts");
   const zhCN = read("../../../packages/i18n/src/locales/zh-CN/index.ts");
-  assert.match(en, /openWith: "Open with"/);
-  assert.match(en, /openWithFileManager: "File Manager"/);
-  assert.match(en, /openWithBuiltInBrowser: "Built-in browser"/);
-  assert.match(en, /openWithDefaultBrowser: "Default browser"/);
-  assert.match(en, /defaultBrowserOpenFailed:/);
+  assert.match(en, /openInVSCode: "Open in VS Code"/);
+  assert.match(en, /openInFileExplorer: "Open in File Explorer"/);
+  assert.match(en, /defaultApplicationOpenFailed:/);
   assert.match(en, /copyFullPath: "Copy full path"/);
   assert.match(en, /copyRelativePath: "Copy relative path"/);
-  assert.match(zhCN, /openWith: "打开方式"/);
-  assert.match(zhCN, /openWithFileManager: "文件管理器"/);
-  assert.match(zhCN, /openWithBuiltInBrowser: "内置浏览器"/);
-  assert.match(zhCN, /openWithDefaultBrowser: "默认浏览器"/);
-  assert.match(zhCN, /defaultBrowserOpenFailed:/);
+  assert.match(zhCN, /openInVSCode: "在 VS Code 中打开"/);
+  assert.match(zhCN, /openInFileExplorer: "在资源管理器中打开"/);
+  assert.match(zhCN, /defaultApplicationOpenFailed:/);
   assert.match(zhCN, /copyFullPath: "复制完整地址"/);
   assert.match(zhCN, /copyRelativePath: "复制相对地址"/);
 });

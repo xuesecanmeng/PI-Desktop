@@ -401,6 +401,7 @@ export type AppState = {
     mimeType?: string;
     line?: number;
     column?: number;
+    isDirectory?: boolean;
   } | null;
   /** Open (or activate) the transcript tab of one delegated subagent. */
   openSubagentTab: (delegationId: string, agentName?: string) => void;
@@ -429,7 +430,7 @@ export type AppState = {
   openFileInWorkPanel: (
     path: string,
     mimeType?: string,
-    position?: { line?: number; column?: number },
+    position?: { line?: number; column?: number; isDirectory?: boolean },
   ) => void;
   openUrlInWorkPanel: (url: string) => void;
   updateBrowserWorkPanelTab: (state: BrowserState) => void;

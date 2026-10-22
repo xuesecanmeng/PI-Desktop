@@ -125,7 +125,9 @@ try {
       ?.setTitle("PI HTML Link Regression QA"), page.url());
   for (const item of cases) {
     await page.evaluate(id => window.__PI_DESKTOP__.selectSession(id), item.sessionId);
-    await page.getByRole("link", { name: item.label, exact: true }).click();
+    await page.getByRole("link", { name: item.label, exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Open with", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Built-in browser", exact: true }).click();
     const url = pathToFileURL(item.file).href;
     let guest;
     const deadline = Date.now() + 15_000;
@@ -134,7 +136,7 @@ try {
       if (guest) break;
       await new Promise(resolve => setTimeout(resolve, 100));
     } while (Date.now() < deadline);
-    assert.ok(guest, item.label + ": transcript click must create a real HTML guest");
+    assert.ok(guest, item.label + ": explicit browser action must create a real HTML guest");
     assert.equal(await app.evaluate(async ({ webContents, BrowserWindow }, id) => {
       const wc = webContents.fromId(id);
       const visibleGuest = views => views.some(view => view.getVisible() &&
@@ -231,9 +233,11 @@ try {
     const result = await window.piDesktop.invoke("pi-desktop/plugin/disable", "pi.browser");
     if (!result.ok) throw new Error(result.error.message);
   });
-  await page.getByRole("link", { name: cases[0].label, exact: true }).click();
+  await page.getByRole("link", { name: cases[0].label, exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Open with", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Built-in browser", exact: true }).click();
   await page.locator(".toast-message").filter({
-    hasText: "This view could not be loaded. Reload the plugin and try again.",
+    hasText: "The built-in browser is unavailable.",
   }).waitFor();
   results.push("disabled browser reports a visible error without auto-enabling");
   console.log("HTML_LINKS_RESULT " + JSON.stringify({ results, output }));

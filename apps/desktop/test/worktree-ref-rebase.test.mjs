@@ -18,6 +18,15 @@ async function fixture() {
   return { root, parent, worktree };
 }
 
+test("a parent directory reference resolves to the existing worktree directory", async () => {
+  const { root, parent, worktree } = await fixture();
+  try {
+    assert.equal(await rebaseWorktreeRef(join(parent, "docs"), { parent, worktree }), join(worktree, "docs"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a reference without a worktree context is unchanged", async () => {
   assert.equal(
     await rebaseWorktreeRef("/repo/docs/a.md", null),

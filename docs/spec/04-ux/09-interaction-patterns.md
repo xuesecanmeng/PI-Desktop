@@ -1397,10 +1397,18 @@ Project drag/drop follows these patterns:
   searches the whole open project — its group's folders, primary first
   (ADR 0263) — and then opens where it resolved: a project file in the bundled
   `pi.file-manager` work-panel view (the host `file:` tab when that view is not
-  available), a session-scratch or attachment file in the host `file:` tab, and
-  an unpositioned `.html`/`.htm` page from any project folder or the current
-  session's scratch directory in the side browser. HTML navigation uses the
-  resolved absolute path after file-reference resolution checks its roots.
+  available), a session-scratch or attachment file in the host `file:` tab.
+  HTML follows those same file destinations instead of automatically opening
+  the side browser. Settings → AI → Defaults selects Built-in viewer or System
+  default application for every file (including HTML) and directory with one
+  preference. Explicit HTML Open with choices override that preference. System opening uses the resolved
+  absolute path;
+  it does not preserve source-line navigation. Explicit Markdown directory
+  links follow the file/folder preference, browsing the directory in the host
+  Files tab or opening it in the system file manager. The in-app directory
+  tree expands children and applies the same preferences to child file clicks.
+  Plain directory names are not automatically linked. An explicit HTML browser
+  choice uses the resolved absolute path after reference resolution checks its roots.
   No project is required to open a scratch artifact. Missing workspace state
   is normalized consistently across asynchronous session-change guards.
   Local `file:` Markdown URLs are converted to file references before
@@ -1413,11 +1421,17 @@ Project drag/drop follows these patterns:
   project as an absolute one, exactly as a scratch or attachment file does. A
   chip whose reference matches nothing opens nothing and reports itself. Right-
   clicking a transcript file reference offers Copy full path and Copy relative
-  path on every surface that names it. Unpositioned `.html` and `.htm`
-  references also offer an **Open with** submenu containing File Manager,
-  built-in browser, and default browser. Each choice completes the reference
-  first and opens that exact resolved file. Other file types keep the copy
-  actions only; the transcript menu has no **Show in folder** action. A file
+  path on every surface that names it. An **Open with** submenu containing
+  File Manager, built-in browser and default browser is added only after Main
+  resolves an existing regular `.html`/`.htm` file. HTML-named directories,
+  directory aliases and missing references keep generic actions. Generic actions
+  appear immediately; metadata enrichment preserves focus and cannot revive a
+  dismissed menu, replace a newer menu or survive a session/project change. Local references of every type also
+  offer **Open in VS Code** and **Open in File Explorer**. The latter selects a
+  file or opens a directory's contents. Each action completes the reference
+  first and uses that exact path; missing paths open nothing. VS Code uses a
+  Main-constructed fixed file URI after containment checks. Remote workspace
+  references keep copy actions without local application actions. A file
   outside the project has no relative path to copy and reports that fact.
 - In the host `file:` tab, a conversation MP4 that cannot be previewed because
   it is binary or exceeds the text preview limit offers **Open with default

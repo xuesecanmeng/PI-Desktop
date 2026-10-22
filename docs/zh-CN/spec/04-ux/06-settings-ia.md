@@ -103,6 +103,9 @@
   渲染直到其主机支持的设置模式和运行时效果存在。
 
 ### 全局 AI（`ai` 选项卡）
+
+One searchable, portable `fileOpenTarget` setting in Settings → AI → Defaults chooses Built-in viewer (default) or System default application for all files (including HTML) and directories. HTML opens as source in File Manager by default and retains its Open with submenu for File Manager, built-in browser and default browser overrides. Local file-reference menus also offer Open in VS Code and Open in File Explorer; the latter selects a file or opens a directory’s contents. Directories browse in the host Files tab under the built-in preference. Source positions remain available in built-in source viewing. Remote workspace references keep copy actions without native application actions.
+
 - **权限**卡：全局权限模式控制
   （询问/接受编辑/自动）控制代理如何自主行动。该控件是共享锚定菜单表面上的
   菜单选择器，而不是由平台绘制的 `<select>` 弹层，因此设置里的每个选择器

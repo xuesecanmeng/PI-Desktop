@@ -28,6 +28,12 @@ work-panel tab already carries was honoured by main for `pi.browser` only.
 
 ## Decision
 
+The [configurable file-opening amendment](configurable-file-opening.md) keeps
+file completion and adds one file/folder destination preference, explicit
+native menu actions, and directory resolution/browsing. It supersedes the
+automatic HTML browser destination: HTML now follows ordinary file opening,
+while its Open with submenu retains explicit browser choices.
+
 1. **Completion runs in Electron main**, as `fs.resolveRef`, because only main
    sees both the open project and the session's own scratch store
    (`<data_dir>/scratch/<sessionId>/`, ADR 0124). The order is a product
@@ -55,12 +61,11 @@ work-panel tab already carries was honoured by main for `pi.browser` only.
    host viewer's existing scroll support. A file in the session scratch or
    attachment store opens in the
    host `file:` tab, because it lives outside that view's project root — see
-   point 4. An unpositioned `.html` / `.htm` file in any folder of the
-   session's project group or its own scratch directory opens in the side browser
-   (ADR 0163), for an agent reply and a user chip alike: it is a page to run,
-   not a file to read. Main resolves browser roots from the owning session,
-   never a different visible project's root. The resolved absolute path is
-   carried through navigation, and realpath containment still applies.
+   point 4. HTML follows the same file-opening preference and source viewer
+   rules. Its Open with submenu can explicitly select File Manager, built-in
+   browser, or default browser for one click. Main resolves browser roots from
+   the owning session, never a different visible project's root. The resolved
+   absolute path is carried through navigation, and containment still applies.
    Positioned HTML references retain the source viewer. A disabled browser
    reports an error instead of silently dropping a click or enabling itself.
    A direct user click on a project file actively ensures

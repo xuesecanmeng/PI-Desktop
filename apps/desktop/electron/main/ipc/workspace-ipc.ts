@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, statSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { isAbsolute, join, resolve } from "node:path";
 import {
   ErrorCodes,
@@ -822,10 +823,19 @@ export function registerWorkspaceIpc({
     (await workspaceRootInfo(sessionId)).root;
 
   handle(IPC.invoke.fsList, async (input: { path?: string; sessionId?: string } = {}) => {
+    const requested = String(input.path ?? "");
     const remote = await remoteFileWorkspace(input.sessionId);
-    if (remote) return readRemoteFiles(remote, "list", input.path);
+    if (remote && !(await isLocalStoredFile(requested))) return readRemoteFiles(remote, "list", input.path);
+    if (isAbsolute(requested)) {
+      const root = await optionalWorkspaceRoot(input.sessionId);
+      const target = await resolveRealOpenablePath(requested, root, await fsExtraRoots(root));
+      if (!target) {
+        throw Object.assign(new Error("path outside allowed roots"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+      }
+      return { entries: await listDir(target, "") };
+    }
     const root = await requireWorkspaceRoot(input.sessionId);
-    return { entries: await listDir(root, String(input.path ?? "")) };
+    return { entries: await listDir(root, requested) };
   });
 
   /**
@@ -956,35 +966,11 @@ export function registerWorkspaceIpc({
     },
   );
 
-  handle(IPC.invoke.fsReveal, async (input: { path?: string; sessionId?: string } = {}) => {
+  const requireLocalOpenablePath = async (input: { path?: string; sessionId?: string }) => {
     const remote = await remoteFileWorkspace(input.sessionId);
-    if (remote && !(await isLocalStoredFile(String(input.path ?? "")))) throw Object.assign(new Error("remote paths cannot be revealed on this computer"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
-    const requested = String(input.path ?? "").trim();
-    let workspaceRoot: string | null = null;
-    try {
-      workspaceRoot = await requireWorkspaceRoot(input.sessionId);
-    } catch (error) {
-      if (!isAbsolute(requested) && !isAttachmentBlobRef(requested)) {
-        throw error;
-      }
+    if (remote && !(await isLocalStoredFile(String(input.path ?? "")))) {
+      throw Object.assign(new Error("remote paths cannot be opened on this computer"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
     }
-    const target = await resolveRealOpenablePath(
-      requested,
-      workspaceRoot,
-      await fsExtraRoots(workspaceRoot),
-    );
-    if (!target) {
-      throw Object.assign(new Error("path outside allowed roots"), {
-        errorCode: ErrorCodes.INVALID_ARGUMENT,
-      });
-    }
-    shell.showItemInFolder(stripWinLongPrefix(target));
-    return { ok: true };
-  });
-
-  handle(IPC.invoke.fsOpen, async (input: { path?: string; mimeType?: string; sessionId?: string } = {}) => {
-    const remote = await remoteFileWorkspace(input.sessionId);
-    if (remote && !(await isLocalStoredFile(String(input.path ?? "")))) throw Object.assign(new Error("remote paths cannot be opened on this computer"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
     const workspaceRoot = await optionalWorkspaceRoot(input.sessionId);
     const requested = String(input.path ?? "").trim();
     const target = await resolveRealOpenablePath(
@@ -997,12 +983,41 @@ export function registerWorkspaceIpc({
         errorCode: ErrorCodes.INVALID_ARGUMENT,
       });
     }
-    if (!(await stat(target)).isFile()) {
-      throw Object.assign(new Error("not a file"), {
+    const info = await stat(target);
+    if (!info.isFile() && !info.isDirectory()) {
+      throw Object.assign(new Error("not a file or directory"), {
         errorCode: ErrorCodes.INVALID_ARGUMENT,
       });
     }
-    const openPath = await openableMp4Path(dataDir, target, input.mimeType);
+    return { target, info };
+  };
+
+  handle(IPC.invoke.fsReveal, async (input: { path?: string; sessionId?: string } = {}) => {
+    const { target, info } = await requireLocalOpenablePath(input);
+    if (info.isDirectory()) {
+      const openError = await shell.openPath(stripWinLongPrefix(target));
+      if (openError) throw new Error(openError);
+    } else {
+      shell.showItemInFolder(stripWinLongPrefix(target));
+    }
+    return { ok: true };
+  });
+
+  handle(IPC.invoke.fsOpenInVSCode, async (input: { path?: string; sessionId?: string } = {}) => {
+    const { target, info } = await requireLocalOpenablePath(input);
+    const fileUrl = pathToFileURL(stripWinLongPrefix(target));
+    // Main constructs the fixed file-only scheme after the filesystem gate;
+    // renderer-supplied URLs still use the external URL allowlist.
+    const url = new URL("vscode://file");
+    url.pathname = `${fileUrl.host ? `//${fileUrl.host}` : ""}${fileUrl.pathname}`;
+    if (info.isDirectory() && !url.pathname.endsWith("/")) url.pathname += "/";
+    await shell.openExternal(url.href);
+    return { ok: true };
+  });
+
+  handle(IPC.invoke.fsOpen, async (input: { path?: string; mimeType?: string; sessionId?: string } = {}) => {
+    const { target, info } = await requireLocalOpenablePath(input);
+    const openPath = info.isFile() ? await openableMp4Path(dataDir, target, input.mimeType) : target;
     const openError = await shell.openPath(stripWinLongPrefix(openPath));
     if (openError) throw new Error(openError);
     return { ok: true };
@@ -1036,8 +1051,11 @@ export function registerWorkspaceIpc({
   handle(
     IPC.invoke.fsResolveRef,
     async (
-      input: { ref?: string; sessionId?: string } = {},
+      input: { ref?: string; sessionId?: string; allowDirectories?: boolean } = {},
     ): Promise<FsChatRefResolveResult> => {
+      if (input.allowDirectories !== undefined && typeof input.allowDirectories !== "boolean") {
+        throw Object.assign(new Error("allowDirectories is invalid"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+      }
       const rawRef = String(input.ref ?? "").trim();
       if (!rawRef) return { match: null };
       const remote = await remoteFileWorkspace(input.sessionId);
@@ -1073,7 +1091,7 @@ export function registerWorkspaceIpc({
       if (await isChatRefOutsideRoots(ref, roots)) {
         return { match: null, reason: "outside-allowed-roots" };
       }
-      return { match: await resolveChatFileRef(ref, roots) };
+      return { match: await resolveChatFileRef(ref, roots, { allowDirectories: input.allowDirectories === true }) };
     },
   );
 

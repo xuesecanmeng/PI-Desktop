@@ -427,6 +427,7 @@ function isTranscriptDisplayModeValue(value: unknown): value is TranscriptDispla
 export function normalizeSettings(settings: AppSettings): AppSettings {
   return {
     ...settings,
+    fileOpenTarget: settings.fileOpenTarget === "external" ? "external" : "workpanel",
     sidebarRunningIndicators: settings.sidebarRunningIndicators !== false,
     sidebarRunningBadge: settings.sidebarRunningBadge !== false,
     sidebarRunningRail: settings.sidebarRunningRail === true,
@@ -458,6 +459,10 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
 }
 
 export function validateSettingsWrite(settings: AppSettings): AppSettings {
+  if (Object.prototype.hasOwnProperty.call(settings, "fileOpenTarget") &&
+    settings.fileOpenTarget !== "workpanel" && settings.fileOpenTarget !== "external") {
+    throw Object.assign(new Error("fileOpenTarget is invalid"), { errorCode: "INVALID_PARAMS" });
+  }
   if (
     settings.thinkingDisplayMode !== undefined &&
     settings.thinkingDisplayMode !== "detailed" &&
@@ -1615,6 +1620,8 @@ export const api = {
   fsReveal: (path: string, sessionId?: string) => invoke(IPC.invoke.fsReveal, { path, ...(sessionId ? { sessionId } : {}) }),
   fsOpen: (path: string, mimeType?: string, sessionId?: string) =>
     invoke(IPC.invoke.fsOpen, { path, mimeType, ...(sessionId ? { sessionId } : {}) }),
+  fsOpenInVSCode: (path: string, sessionId?: string) =>
+    invoke(IPC.invoke.fsOpenInVSCode, { path, ...(sessionId ? { sessionId } : {}) }),
   fsIndex: (sessionId?: string) => invoke<FsIndexResult>(IPC.invoke.fsIndex, { ...(sessionId ? { sessionId } : {}) }),
   fsSearch: (sessionId: string | undefined, query: string) =>
     invoke<FsIndexResult>(IPC.invoke.fsSearch, { ...(sessionId ? { sessionId } : {}), query }),
@@ -1623,10 +1630,11 @@ export const api = {
    * The main process owns the root order — project, session scratch,
    * attachments — because only it can see the scratch store.
    */
-  fsResolveRef: (ref: string, sessionId?: string) =>
+  fsResolveRef: (ref: string, sessionId?: string, allowDirectories = false) =>
     invoke<FsChatRefResolveResult>(IPC.invoke.fsResolveRef, {
       ref,
       ...(sessionId ? { sessionId } : {}),
+      ...(allowDirectories ? { allowDirectories: true } : {}),
     }),
   composerCommands: () =>
     invoke<{ commands: ComposerCommand[] }>(IPC.invoke.composerCommands),

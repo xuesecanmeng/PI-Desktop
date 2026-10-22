@@ -18,6 +18,7 @@ export type WorkPanelTab = {
   /** Optional 1-based line/column for host file tabs (chat `path:line` refs). */
   line?: number;
   column?: number;
+  isDirectory?: boolean;
 };
 
 export type WorkPanelTabsState = {
@@ -33,6 +34,7 @@ export type WorkPanelContext = WorkPanelTabsState & {
     mimeType?: string;
     line?: number;
     column?: number;
+    isDirectory?: boolean;
   } | null;
 };
 
@@ -48,6 +50,7 @@ export function createWorkPanelFileRequest(
     ...(tab.mimeType ? { mimeType: tab.mimeType } : {}),
     ...(tab.line != null ? { line: tab.line } : {}),
     ...(tab.column != null ? { column: tab.column } : {}),
+    ...(tab.isDirectory ? { isDirectory: true } : {}),
   };
 }
 
@@ -309,7 +312,7 @@ export function normalizeWorkPanelFilePath(path: string): string {
 export function fileWorkPanelTab(
   path: string,
   mimeType?: string,
-  position?: { line?: number; column?: number },
+  position?: { line?: number; column?: number; isDirectory?: boolean },
 ): WorkPanelTab {
   const resource = normalizeWorkPanelFilePath(path);
   return {
@@ -319,6 +322,7 @@ export function fileWorkPanelTab(
     ...(mimeType ? { mimeType } : {}),
     ...(position?.line != null ? { line: position.line } : {}),
     ...(position?.column != null ? { column: position.column } : {}),
+    ...(position?.isDirectory ? { isDirectory: true } : {}),
   };
 }
 

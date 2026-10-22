@@ -180,7 +180,12 @@ export function useContextMenu() {
         target, is stored as empty so Copy still falls back.
       */
       const selection = snapshotSelection(event.currentTarget);
-      setState({ ...request, point: pointForEvent(event), selection });
+      const point = pointForEvent(event);
+      setState({ ...request, point, selection });
+      // Late metadata may enrich this request, never a dismissed or newer menu.
+      return (items: ContextMenuItem[]) => setState((current) =>
+        current?.point === point ? { ...current, items } : current,
+      );
     },
     [],
   );
@@ -198,6 +203,8 @@ export function ContextMenu({
   const submenuRef = useRef<HTMLDivElement>(null);
   const submenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [placement, setPlacement] = useState<ContextMenuPlacement | null>(null);
+  const requestPoint = state?.point;
+  const isPlaced = placement !== null;
   const [openSubmenuId, setOpenSubmenuId] = useState<string | null>(null);
 
   const closeSubmenu = useCallback(() => setOpenSubmenuId(null), []);
@@ -230,10 +237,10 @@ export function ContextMenu({
   // unmounted, so the next one starts over from its own measurement.
   useEffect(() => {
     setOpenSubmenuId(null);
-    if (!state) {
+    if (!requestPoint) {
       setPlacement(null);
     }
-  }, [state]);
+  }, [requestPoint]);
 
   /*
     Measured in a layout effect so the reveal and the final position land in the
@@ -260,7 +267,7 @@ export function ContextMenu({
     right-click interrupted, so closing never strands focus on `<body>`.
   */
   useEffect(() => {
-    if (!state) return;
+    if (!requestPoint) return;
     const interrupted =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -268,7 +275,7 @@ export function ContextMenu({
     return () => {
       if (interrupted?.isConnected) interrupted.focus();
     };
-  }, [state]);
+  }, [requestPoint]);
 
   useEffect(() => {
     if (!state) return;
@@ -316,7 +323,7 @@ export function ContextMenu({
   // Keyboard users land on the first item; Enter then runs it instead of
   // re-opening the menu.
   useEffect(() => {
-    if (!state || !placement) return;
+    if (!requestPoint || !isPlaced) return;
     const frame = requestAnimationFrame(() => {
       menuRef.current
         ?.querySelector<HTMLButtonElement>(
@@ -325,7 +332,7 @@ export function ContextMenu({
         ?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [placement, state]);
+  }, [isPlaced, requestPoint]);
 
   const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     // Tab leaves the menu rather than walking its items.

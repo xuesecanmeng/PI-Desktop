@@ -422,6 +422,7 @@ export const IPC = {
     statsGetTokenUsageHistory: "pi-desktop/stats/getTokenUsageHistory",
     fsReveal: "pi-desktop/fs/reveal",
     fsOpen: "pi-desktop/fs/open",
+    fsOpenInVSCode: "pi-desktop/fs/openInVSCode",
     fsIndex: "pi-desktop/fs/index",
     fsSearch: "pi-desktop/fs/search",
     fsResolveRef: "pi-desktop/fs/resolveRef",
