@@ -9278,8 +9278,12 @@ Follow the [current S3 acceptance scenario](/spec/06-delivery/04-e2e-test-plan#e
   思考和最终回答；`Show thinking` 偏好开启与关闭两种状态；`过程显示` 偏好分别为
   「平铺显示」「命令工具优先」「全折叠显示」；重启后保留已保存的设置；旧版消息级
   转录搜索目标。
-- **步骤：** 确认活动组默认展开，让同一回合在无人操作时完成，并确认过程收起，只剩最终
-  回答（以及错误或待处理操作面）。另一个回合中，明确展开已完成组，并确认后续更新仍保留
+- **步骤：** In every display mode, open and focus a child tool while the turn is
+  active. Complete the turn: the outer process closes, focus moves to its visible
+  header, and the final answer stays visible without claiming a manual scroll
+  anchor. Reopen it: the nested tool choice returns and later updates keep the
+  process open. Repeat without interaction and after closing and reopening the
+  process while running. 另一个回合中，明确展开已完成组，并确认后续更新仍保留
   该选择；随后收起回合披露并确认组随之收起，再重新展开并确认组选择恢复。在「全折叠显示」
   中，确认命令行留在所属活动组内，且只有普通助手进度文字会拆分活动组。在「命令工具优先」
   中，确认 `Bash`／run 行作为组旁的独立行渲染，普通助手进度消息或命令会结束当前组，
@@ -9295,7 +9299,10 @@ Follow the [current S3 acceptance scenario](/spec/06-delivery/04-e2e-test-plan#e
   恢复、保留窗格重新挂载、命令行详情在打开前保持收起，以及旧版搜索定位。
 - **预期：** 一个回合只渲染一个过程披露，包含全部回答前的行，最终回答、助手错误、中止后
   的末尾文字和待处理操作留在披露之外；没有最终回答文字时，过程标题和这些错误或待处理
-  操作面仍然保留。未被操作的披露在完成时收起。「平铺显示」中没有嵌套活动组，活动工具、
+  操作面仍然保留。
+  The outer process closes at completion even after live interaction; later manual
+  expansion survives updates and restores nested choices.
+  「平铺显示」中没有嵌套活动组，活动工具、
   命令、思考和进度行按转录顺序排列，工具详情保持收起。「命令工具优先」中，`Bash`／run 行
   作为组旁的独立行，相邻调用保持分离，普通助手进度消息或命令会结束当前组，因此中间进度
   段落和每条命令都会开启新组。「全折叠显示」（默认）中，命令行留在所属组内，只有普通
@@ -9309,7 +9316,9 @@ Follow the [current S3 acceptance scenario](/spec/06-delivery/04-e2e-test-plan#e
   左边缘。`Show thinking` 关闭时，不再渲染任何已完成的推理行，仅在推理流式输出期间保留
   整段运行的 TextShimmer `Thinking` 指示器；重新打开时恢复。除显示模式的思考默认值外，
   没有任何条目载荷会自动展开：工具／搜索行在用户打开之前保持收起。父级、子级和同级状态
-  相互独立；窗格拥有的用户选择跨更新、偏好切换和重新挂载保留，渲染器重启后重新应用默认值。
+  相互独立。
+  Turn completion resets only the outer process; other pane-owned choices survive
+  updates, preference changes and remounts. Renderer restart reapplies defaults.
   搜索只展开拥有目标消息的回合过程，以及存在时的活动组，每个请求应用一次；条目级精确定位
   不在本次范围内，被偏好隐藏的推理会保持隐藏，直到用户打开 `Show thinking`。已保存的
   `transcriptDisplayMode` 跨重启保留，缺失或未知值解析为「全折叠显示」；已保存的

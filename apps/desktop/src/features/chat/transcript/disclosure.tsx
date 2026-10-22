@@ -16,7 +16,7 @@ import { ScopeContext, type DisclosureScopeValue } from "./disclosure-scope";
 
 type Choice = TranscriptDisclosureChoice;
 
-/** Only explicit choices are retained; untouched nodes derive their defaults. */
+/** Retain disclosure overrides; untouched nodes derive their defaults. */
 class DisclosureChoices {
   private choices: Map<string, Choice>;
   private listeners = new Map<string, Set<() => void>>();
@@ -55,7 +55,7 @@ const ChoicesContext = createContext<DisclosureChoices | null>(null);
  */
 export type { DisclosureScopeValue } from "./disclosure-scope";
 
-/** Explicit choices survive pane eviction, but never persist to the host. */
+/** Disclosure overrides survive pane eviction, but never persist to the host. */
 export function TranscriptDisclosureProvider({ children, sessionId }: { children: ReactNode; sessionId?: string }) {
   const [choices] = useState(() => new DisclosureChoices(
     sessionId ? sessionReadingState(sessionId).disclosures : undefined,
@@ -122,7 +122,7 @@ export function useAutomaticDisclosure(
 
   const previousOpen = useRef(open);
   useLayoutEffect(() => {
-    // Completion must not hide keyboard focus or an active text selection.
+    // Derived defaults must not hide keyboard focus or an active text selection.
     if (previousOpen.current && !open && !choice && ownsReadingPosition(bodyRef.current)) {
       choices.set(key, { open: true });
       scope.claim();
@@ -130,21 +130,26 @@ export function useAutomaticDisclosure(
     previousOpen.current = open;
   }, [choice, choices, key, open, scope.claim]);
 
-  const setManualOpen = useCallback((next: boolean) => {
-    scope.claim();
-    notifyAnchor?.(titleRef.current);
+  const setOpen = useCallback((next: boolean) => {
     if (!next && bodyRef.current?.contains(document.activeElement)) {
       titleRef.current?.focus({ preventScroll: true });
     }
     choices.set(key, { ...choices.get(key), open: next });
-  }, [choices, key, notifyAnchor, scope.claim]);
+  }, [choices, key]);
+  const setManualOpen = useCallback((next: boolean) => {
+    scope.claim();
+    notifyAnchor?.(titleRef.current);
+    setOpen(next);
+  }, [notifyAnchor, scope.claim, setOpen]);
   const toggle = useCallback(() => setManualOpen(!currentOpen.current), [setManualOpen]);
   const collapse = useCallback(() => setManualOpen(false), [setManualOpen]);
+  const collapseAutomatically = useCallback(() => setOpen(false), [setOpen]);
 
   return {
     open,
     toggle,
     collapse,
+    collapseAutomatically,
     claim,
     titleRef,
     bodyRef,

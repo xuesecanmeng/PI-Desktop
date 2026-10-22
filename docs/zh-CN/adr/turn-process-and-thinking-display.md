@@ -4,7 +4,7 @@
 
 - 状态：已接受
 - 日期：2026-09-17
-- 修订：2026-10-21
+- 修订：2026-10-22
 - Issues：#510、#461
 - 修订对象：D071、[ADR 0242](/adr/0242-delta-only-streaming-updates)
 
@@ -23,10 +23,15 @@
 思考活动，该文字会移入过程，但不会改写已存消息。`UiMessage` 没有语义化的最终回答标记，
 因此渲染器不根据措辞猜测。用户消息、系统消息和压缩分隔线继续保留原有回合边界。
 
-每个回合只渲染一个过程披露。回合在给出答案之前产生的所有行都位于其中——活动组与 `Bash`
-命令行同样如此——因此长回合可以用一次操作收起，而不会在答案上方留下一列并列披露。答案本身
-位于披露之外。未操作的过程在回合完成时收起，因此只剩最终回答；若回合没有产出最终文字，
-过程标题及其错误或待处理操作面仍会保留。
+One turn renders exactly one process disclosure. Every row the turn produced
+before its answer lives inside it — the activity groups and the `Bash` run rows
+alike — so a long turn collapses in one gesture instead of leaving a column of
+sibling disclosures above the answer. The answer itself stays outside it. When
+the turn ends, the outer process closes even after interaction while running.
+Focus inside it moves to its visible header without claiming a manual scroll
+anchor. The user can reopen it afterward, and later updates preserve that choice.
+When the turn produced no final text, the process header and its error or
+pending-action surfaces remain visible.
 
 在该披露内部，活动如何分组由显示模式决定。`AppSettings.transcriptDisplayMode` 取值为
 `flat`、`command-first` 或 `fully-folded`；缺失或无效值解析为 `fully-folded`，即
@@ -75,11 +80,16 @@ v0.20.0 发布的布局。三种模式都只渲染一个外层披露。
 且与思考偏好无关。组默认值不变，打开一个已收起的祖先仍会恢复已保留的条目选择，不会展开
 所有后代。
 
-每个标题只切换自己的层级。父子状态彼此独立：收起父级会保留后代选择，重新展开会恢复
-这些选择，同级组不是互斥手风琴。用户操作某个条目时，会把所属组标记为用户接管，但不会
-切换该组；完成事件不得收起包含用户已展开、聚焦或选择内容的容器。只要所属的保留会话
-窗格仍存在，手动选择就跨流式更新、完成、偏好切换、单项变组和行重新挂载保留。窗格淘汰、
-会话删除或渲染器重启会释放这些展示状态；它们不写入消息或宿主设置。
+Each header toggles only its own level. Parent and child states are independent:
+closing a parent preserves descendant choices, reopening restores them, and
+sibling groups do not form an accordion. Manual interaction with an item claims
+its containing group as user-owned without toggling it. Nested choices survive
+completion; the outer process alone resets to closed when the turn ends, retaining
+descendants for inspection when reopened. Manual choices otherwise survive
+streaming, completion, preference changes, reparenting from singleton to
+group, row remounts and pane eviction through the session reading bookmark.
+Session deletion or renderer restart releases this presentation memory; it is not
+stored in messages or host settings.
 
 搜索和导航只展开目标所需的祖先路径：拥有该消息的回合过程，以及存在时的活动组。条目级
 精确定位不在本次范围内，各行详情仍由各自的折叠控制。同一请求重新渲染时，不会反复覆盖

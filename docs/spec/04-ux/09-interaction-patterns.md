@@ -927,7 +927,10 @@ may be retained while exactly one workspace supplies the visible shell context.
   errors and stopped trailing text remain outside it. The `Transcript display`
   mode selects the layout: `flat` has no nested groups, `command-first` lifts
   commands into standalone rows, and `fully-folded` (the default) keeps commands
-  inside their groups.
+  inside their groups. When the turn ends, the outer process closes even after
+  interaction while running. Focus inside moves to the visible header without
+  claiming a manual scroll anchor; the user can reopen it afterward, and later
+  updates preserve that choice.
 - A contiguous activity segment receives a group disclosure only when it has at
   least two visible items under the current thinking preference, and only in
   `command-first` or `fully-folded`. In `fully-folded`, ordinary assistant
@@ -962,8 +965,9 @@ may be retained while exactly one workspace supplies the visible shell context.
   preserves child state, reopening restores it, and sibling groups remain
   independent. Opening a parent is never an expand-all action.
 - A manual item action claims its containing group as user-owned without toggling
-  it. Streaming and completion cannot reopen a manual close or close around
-  content the user opened, focused or selected. Choices survive preference
+  it. Streaming and completion preserve nested choices, including opened,
+  focused or selected content. Turn completion resets only the outer process to
+  closed, retaining descendants for later inspection. Choices survive preference
   changes, singleton-to-group growth and remounts while the retained session pane
   lives.
 - Search/navigation opens the turn process and activity group that own the named

@@ -1068,11 +1068,16 @@ SESSIONS                                      [msg+][↕]
 之外流式显示；后续活动可以把暂定回答重新归入过程，但不会改写已存消息。助手错误和中止
 后的末尾部分回答也留在披露之外。用户／系统消息及压缩边界不变。
 
-该披露包含回合在给出回答之前产生的所有行：普通活动组与 `Bash` 命令行都在其中。因此
-每个回合只渲染一个顶层过程披露，只有 Bash 调用的回合也一样；任何命令行都不是该披露的
-同级，长回合可以用一次操作收起。末尾回答、助手错误、中止后的末尾部分文字和待处理操作
-卡留在披露之外，无需展开过程即可访问。未操作的过程在完成时收起，只剩最终回答；没有最终
-文字时，过程标题和这些操作面仍会保留。
+The disclosure owns every row the turn produced before its answer: ordinary
+activity groups and `Bash` run rows alike. A turn therefore renders exactly one
+top-level process disclosure, including a Bash-only turn; no run row is a sibling
+of it, and a long turn collapses in one gesture. The answer, assistant errors,
+stopped trailing partial text and pending action cards remain outside, reachable
+without expanding the process. The outer process closes when the turn ends,
+including after interaction while running. Focus inside it moves to its visible
+header without claiming a manual scroll anchor. The final answer remains visible;
+with no final text, the process header and those surfaces remain. The user can
+reopen the completed process, and subsequent updates preserve that choice.
 
 在披露内部，`过程显示`模式决定活动如何分组。`fully-folded`（默认；缺失或未知值使用
 它）把普通助手进度段落之间的连续工具、搜索或思考片段组为普通活动组，`Bash`／run 别名
@@ -1107,11 +1112,16 @@ SESSIONS                                      [msg+][↕]
 已完成的推理行，仅在推理正在流式输出时保留整段运行的 TextShimmer `Thinking` 指示器，
 并省略空的纯思考容器。已存推理仍会保留，重新打开偏好时重新出现。
 
-活动组、命令行和条目是相互独立的控件。收起祖先会保留下级选择，重新展开时恢复；收起
-回合披露会隐藏其下所有行，重新展开时恢复用户此前展开的组。展开父级不会展开所有后代。
-用户操作子项时会接管其所属组但不切换该组，因此完成事件不能收起包含已展开、聚焦或选中
-内容的容器。选择以稳定回合／组／条目标识保存在会话窗格内，跨偏好切换和行重新挂载保留；
-窗格淘汰、会话删除或渲染器重启后重新应用默认值，不会写入消息或设置。
+Group, run row and item are independent controls. Closing an ancestor keeps
+descendant choices and reopening restores them; closing the turn's disclosure hides
+every row under it, and reopening restores the groups the user had opened. Opening
+a parent never expands all children. User interaction with a child claims its
+containing group without toggling it, protecting nested content from automatic
+group closure. Turn completion resets only the outer process to closed; nested
+choices remain available when it is reopened. Choices use stable turn/group/item
+identities and remain while the retained session pane lives, including preference changes and row
+remounts; pane eviction, deletion or renderer restart reapplies defaults rather
+than persisting disclosure state to messages or settings.
 
 搜索和导航只展开拥有目标消息的回合过程与活动组，并且每个显示请求只应用一次。条目级
 精确定位不在本次范围内。被偏好隐藏的推理会保持隐藏，直到用户打开 `Show thinking`。

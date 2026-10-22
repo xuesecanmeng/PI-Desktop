@@ -3417,7 +3417,10 @@ identify the platform validation still needed.
 - **Expected**: A turn renders exactly one process disclosure containing every
   pre-answer row, the `Bash`/run rows included; the trailing answer, assistant
   errors and stopped trailing text stay outside it, as do pending actions. The
-  active group opens, then closes on completion only if untouched; completed
+  outer process closes when the turn ends, even after live interaction, and can
+  then be reopened without losing descendant choices. Focus inside moves to its
+  visible header without claiming a manual scroll anchor. The active nested
+  group opens, then closes on completion only if untouched; completed
   groups otherwise start closed. Closing the turn's disclosure closes the groups
   and run rows under it, and reopening restores the user's group choices. In
   Fully folded (the default), run rows stay inside their groups and only ordinary
@@ -3436,8 +3439,9 @@ identify the platform validation still needed.
   the live TextShimmer `Thinking` indicator remains while reasoning streams, and
   turning it back on restores the completed rows. Parent, child and sibling
   choices are independent; closing/reopening a parent preserves descendants, and
-  streaming/completion does not override user-owned choices. Retained-pane
-  remounts preserve choices; renderer restart reapplies defaults while tool names,
+  streaming/completion preserves nested choices, while turn completion resets
+  only the outer process to closed. Later manual expansion survives updates.
+  Retained-pane remounts preserve choices; renderer restart reapplies defaults while tool names,
   arguments, results and statuses remain restored. Group headers show bounded
   running and issue summaries without marking the whole turn failed.
 - **Specs linked**: `04-ux/01-ui-ia.md`,
@@ -17325,9 +17329,13 @@ plugin-form fixtures in an isolated temporary directory at runtime.
   answer; the `Show thinking` preference on and off; the `Transcript display`
   preference at Flat, Commands first, and Fully folded; a restart with saved
   settings; legacy message-level transcript search targets.
-- **Steps:** Confirm a live active group starts open, let that same turn finish
-  without interacting, and confirm the process closes so only the final answer
-  (and any error or pending-action surface) remains. On a second turn, explicitly
+- **Steps:** In every display mode, confirm a live active group starts open, then
+  open and focus a child tool before the turn finishes. Confirm the outer process
+  closes and focus moves to its visible header, leaving the final answer (and any
+  error or pending-action surface) visible without claiming a manual scroll anchor.
+  Reopen the process and confirm the tool choice returns and later updates keep
+  the process open. Repeat with an untouched process and with a process explicitly
+  closed and reopened while running. On a second turn, explicitly
   open a completed group and confirm the choice survives subsequent updates; then
   close the turn's disclosure and confirm the group closes with it, and reopen to
   confirm the group choice is restored. In Fully folded, confirm run rows stay
@@ -17355,9 +17363,10 @@ plugin-form fixtures in an isolated temporary directory at runtime.
 - **Expected:** A turn renders exactly one process disclosure containing every
   pre-answer row, leaving the final answer, assistant errors, stopped trailing
   text and pending actions outside it; when no final answer text exists, the
-  process header and those error or pending-action surfaces remain. An untouched
-  process closes at completion. In Flat there are no nested activity groups, and
-  active tools, commands, thinking and progress rows follow transcript order with
+  process header and those error or pending-action surfaces remain. The outer
+  process closes at completion even after live interaction; later manual expansion
+  survives updates and restores nested choices. In Flat there are no nested
+  activity groups, and active tools, commands, thinking and progress rows follow transcript order with
   tool details collapsed. In Commands first, `Bash`/run rows are standalone
   beside the groups, adjacent calls stay separate, and a normal assistant
   progress message or a command ends a group, so the middle progress paragraph
@@ -17380,7 +17389,8 @@ plugin-form fixtures in an isolated temporary directory at runtime.
   `Thinking` indicator remains while reasoning streams; turning it back on
   restores the rows. No item payload opens itself except the display mode's
   Thinking default: a tool/search row stays closed until the user opens it.
-  Parent/child/sibling states remain independent, pane-owned user choices survive
+  Apart from the outer process closing at completion, parent/child/sibling states
+  remain independent, and pane-owned user choices survive
   updates, preference changes and remounts, and renderer restart reapplies
   defaults. Search reveals the turn process and, where one exists, the activity
   group that own the named message once per request; item-level targeting is not

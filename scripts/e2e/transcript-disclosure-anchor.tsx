@@ -594,8 +594,8 @@ globalThis.transcriptDisclosureProbe = async () => {
     renderProcess(true);
     renderProcess(false);
     assert(
-      processTitle.getAttribute("aria-expanded") === "true",
-      "a user-expanded process should stay open after completion",
+      processTitle.getAttribute("aria-expanded") === "false",
+      "completion should close a process expanded while running",
     );
 
     // A fresh process starts active. Its automatic collapse and the reader's

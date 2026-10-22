@@ -1,5 +1,5 @@
 import type { SubagentOutcome } from "../../../lib/subagent-topology";
-import { useContext, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentActivity } from "@pi-desktop/shared";
 import type { AssistantTurnPart } from "../../../lib/assistant-turns";
@@ -85,15 +85,20 @@ export function TurnProcess({
     processParts.flatMap((part) => part.kind === "activity" ? part.items : []), delegationStatuses,
   ), [processParts, delegationStatuses]);
   const thinkingNow = useMemo(() => isTurnThinking(turnParts, isActive), [turnParts, isActive]);
-  // Active processes start open and untouched completed ones close by default;
-  // an explicit user choice stays authoritative. This does not depend on the
-  // thinking preference, and a recorded failure keeps an untouched active
-  // process open through recovery because it stays active until the turn ends.
+  // Completion closes the outer process even after interaction while running;
+  // nested choices and later manual expansion remain available.
   const disclosure = useAutomaticDisclosure(
     isActive,
     revealRequest,
     disclosureKey("turn", turnId),
   );
+  const wasActive = useRef(isActive);
+  const { collapseAutomatically } = disclosure;
+  useLayoutEffect(() => {
+    const completed = wasActive.current && !isActive;
+    wasActive.current = isActive;
+    if (completed) collapseAutomatically();
+  }, [isActive, collapseAutomatically]);
   const detailsId = useId();
   const [now, setNow] = useState(Date.now);
   const { startedAt, endedAt } = useMemo(() => turnProcessTiming(turnParts), [turnParts]);

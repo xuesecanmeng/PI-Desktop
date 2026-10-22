@@ -886,9 +886,11 @@ activity groups and `Bash` run rows alike. A turn therefore renders exactly one
 top-level process disclosure, including a Bash-only turn; no run row is a sibling
 of it, and a long turn collapses in one gesture. The answer, assistant errors,
 stopped trailing partial text and pending action cards remain outside, reachable
-without expanding the process. An untouched process closes on completion, leaving
-the final answer; with no final text, the process header and those surfaces
-remain.
+without expanding the process. The outer process closes when the turn ends,
+including after interaction while running. Focus inside it moves to its visible
+header without claiming a manual scroll anchor. The final answer remains visible;
+with no final text, the process header and those surfaces remain. The user can
+reopen the completed process, and subsequent updates preserve that choice.
 
 Within the process, the `Transcript display` mode decides the grouping.
 `fully-folded` (the default; absent or unknown values use it) forms ordinary
@@ -945,9 +947,10 @@ Group, run row and item are independent controls. Closing an ancestor keeps
 descendant choices and reopening restores them; closing the turn's disclosure hides
 every row under it, and reopening restores the groups the user had opened. Opening
 a parent never expands all children. User interaction with a child claims its
-containing group without toggling it, so completion cannot close around opened,
-focused or selected content. Choices use stable turn/group/item identities and
-remain while the retained session pane lives, including preference changes and row
+containing group without toggling it, protecting nested content from automatic
+group closure. Turn completion resets only the outer process to closed; nested
+choices remain available when it is reopened. Choices use stable turn/group/item
+identities and remain while the retained session pane lives, including preference changes and row
 remounts; pane eviction, deletion or renderer restart reapplies defaults rather
 than persisting disclosure state to messages or settings.
 

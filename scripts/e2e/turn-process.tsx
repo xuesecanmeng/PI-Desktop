@@ -9,6 +9,7 @@ import { ShowThinkingRow } from "../../apps/desktop/src/components/settings/Show
 import { TranscriptDisplayModeRow } from "../../apps/desktop/src/components/settings/TranscriptDisplayModeRow";
 import { buildTranscriptEntries } from "../../apps/desktop/src/lib/assistant-turns";
 import { TranscriptSearchContext } from "../../apps/desktop/src/lib/transcript-search-context";
+import { DisclosureAnchorContext } from "../../apps/desktop/src/lib/disclosure-anchor-context";
 import type { TranscriptSearchTarget } from "../../apps/desktop/src/lib/transcript-reading";
 import { useAppStore } from "../../apps/desktop/src/stores/app-store";
 
@@ -77,6 +78,8 @@ export async function turnProcessProbe() {
     onUncaughtError: (error) => errors.push(error),
   });
   const notes: string[] = [];
+  const anchoredTitles: (HTMLElement | null)[] = [];
+  const recordAnchor = (title: HTMLElement | null) => anchoredTitles.push(title);
   const metrics: Record<string, unknown> = {};
   const check = (value: unknown, name: string) => {
     assert(value, name);
@@ -95,9 +98,11 @@ export async function turnProcessProbe() {
     flushSync(() =>
       root.render(
         <I18nextProvider i18n={i18n}>
-          <TranscriptSearchContext.Provider value={search}>
-            <AssistantTurn key={key} entry={entry} isActive={active} />
-          </TranscriptSearchContext.Provider>
+          <DisclosureAnchorContext.Provider value={recordAnchor}>
+            <TranscriptSearchContext.Provider value={search}>
+              <AssistantTurn key={key} entry={entry} isActive={active} />
+            </TranscriptSearchContext.Provider>
+          </DisclosureAnchorContext.Provider>
         </I18nextProvider>,
       ),
     );
@@ -386,6 +391,38 @@ export async function turnProcessProbe() {
         !visible(firstProcess()),
       "an untouched process chunk collapses on completion",
     );
+
+    for (const mode of ["flat", "command-first", "fully-folded"] as const) {
+      setSettings({ transcriptDisplayMode: mode });
+      const key = `completion-${mode}`;
+      render(activeTurn, true, null, key);
+      const toolHeader = row("read")?.querySelector<HTMLButtonElement>(".tool-row-header");
+      assert(toolHeader, "the active process contains a tool header");
+      click(toolHeader);
+      flushSync(() => toolHeader.focus());
+      check(toolHeader.getAttribute("aria-expanded") === "true", `${mode}: a running tool can be opened`);
+      const anchorCount = anchoredTitles.length;
+      render([...activeTurn, answer], false, null, key);
+      check(
+        processHeaders()[0]?.getAttribute("aria-expanded") === "false" && !visible(firstProcess()),
+        `${mode}: completion collapses the whole process after child interaction`,
+      );
+      check(document.activeElement === processHeaders()[0], `${mode}: completion keeps keyboard focus on the visible process title`);
+      check(anchoredTitles.length === anchorCount, `${mode}: automatic completion does not claim a manual scroll anchor`);
+      check(visible(row(answer.id)), `${mode}: completion leaves the final answer visible`);
+      click(processHeaders()[0] ?? null);
+      check(visible(firstProcess()) && toolHeader.getAttribute("aria-expanded") === "true", `${mode}: reopening restores the nested tool choice`);
+      render([...activeTurn, answer], false, null, key);
+      check(visible(firstProcess()), `${mode}: a later render preserves manual expansion after completion`);
+
+      const manualKey = `manual-completion-${mode}`;
+      render(activeTurn, true, null, manualKey);
+      click(processHeaders()[0] ?? null);
+      click(processHeaders()[0] ?? null);
+      render([...activeTurn, answer], false, null, manualKey);
+      check(processHeaders()[0]?.getAttribute("aria-expanded") === "false", `${mode}: completion also resets a process explicitly opened while running`);
+    }
+    setSettings();
 
     // A streaming thinking chunk superseded by a later Bash row must not keep a
     // false Thinking header: the real tail is the Bash row.

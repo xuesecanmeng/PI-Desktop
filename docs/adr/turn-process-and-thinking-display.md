@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-17
-- Amended: 2026-10-21
+- Amended: 2026-10-22
 - Issues: #510, #461
 - Amends: D071, [ADR 0242](0242-delta-only-streaming-updates.md)
 
@@ -30,10 +30,12 @@ boundaries.
 One turn renders exactly one process disclosure. Every row the turn produced
 before its answer lives inside it — the activity groups and the `Bash` run rows
 alike — so a long turn collapses in one gesture instead of leaving a column of
-sibling disclosures above the answer. The answer itself stays outside it. An
-untouched process closes when the turn completes, so only the final answer
-remains; when the turn produced no final text, the process header and its error
-or pending-action surfaces remain visible.
+sibling disclosures above the answer. The answer itself stays outside it. When
+the turn ends, the outer process closes even after interaction while running.
+Focus inside it moves to its visible header without claiming a manual scroll
+anchor. The user can reopen it afterward, and later updates preserve that choice.
+When the turn produced no final text, the process header and its error or
+pending-action surfaces remain visible.
 
 Inside that disclosure, the display mode decides how activity is grouped.
 `AppSettings.transcriptDisplayMode` is one of `flat`, `command-first`, or
@@ -110,9 +112,10 @@ still exposes the retained item choices without opening all descendants.
 Each header toggles only its own level. Parent and child states are independent:
 closing a parent preserves descendant choices, reopening restores them, and
 sibling groups do not form an accordion. Manual interaction with an item claims
-its containing group as user-owned without toggling it; completion must not close
-a container around content the user opened, focused, or selected. Manual choices
-survive streaming, completion, preference changes, reparenting from singleton to
+its containing group as user-owned without toggling it. Nested choices survive
+completion; the outer process alone resets to closed when the turn ends, retaining
+descendants for inspection when reopened. Manual choices otherwise survive
+streaming, completion, preference changes, reparenting from singleton to
 group, row remounts and pane eviction through the session reading bookmark.
 Session deletion or renderer restart releases this presentation memory; it is not
 stored in messages or host settings.
