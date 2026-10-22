@@ -873,64 +873,86 @@ reading surface of the workstation.
 
 ### Turn process and thinking display
 
-One unified turn-process presentation gives each loaded assistant turn one outer
-whole-process disclosure around its chronological collapsible segments and
-standalone command rows, plus its trailing answer outside. Reasoning,
-tools, hosted searches and intermediate assistant text keep their transcript order
-across those segments. The trailing answer streams outside the process; later
-activity can reclassify provisional answer text into the process without changing
-the stored message. Assistant errors and stopped trailing partial answers also
-stay outside it. User/system messages and compaction boundaries are unchanged.
+One unified turn-process presentation projects each loaded assistant turn into a
+single collapsible process disclosure plus its trailing answer. Reasoning, tools,
+hosted searches and intermediate assistant text keep their transcript order inside
+that disclosure. The trailing answer streams outside the process; later activity
+can reclassify provisional answer text into the process without changing the
+stored message. Assistant errors and stopped trailing partial answers also stay
+outside it. User/system messages and compaction boundaries are unchanged.
 
-Within the process, an ordinary activity group represents one contiguous
-tool/search/thinking segment between progress paragraphs or Bash rows. It renders a
-group header only when at least two items are visible under the current thinking
-preference. A singleton uses its item disclosure directly, hidden thinking never
-creates an empty wrapper, and the existing Task topology remains the container for
-delegated work. Bash and run aliases stay outside segment and ordinary activity
-disclosures but inside the whole-process disclosure. Collapsing the outer level
-hides commands and every inner segment; reopening restores their independent
-choices. Command-only turns retain the outer control. Adjacent Bash rows each
-remain standalone, and a Bash row's detail stays closed until the user opens it.
+The disclosure owns every row the turn produced before its answer: ordinary
+activity groups and `Bash` run rows alike. A turn therefore renders exactly one
+top-level process disclosure, including a Bash-only turn; no run row is a sibling
+of it, and a long turn collapses in one gesture. The answer, assistant errors,
+stopped trailing partial text and pending action cards remain outside, reachable
+without expanding the process. An untouched process closes on completion, leaving
+the final answer; with no final text, the process header and those surfaces
+remain.
 
-The whole-process control starts open while running and defaults closed at
-completion. Manual choices and nested interactions remain authoritative, and
-completion cannot hide focused or selected content. Its localized title identifies
-the whole turn; the answer and pending actions remain visible when it is closed.
+Within the process, the `Transcript display` mode decides the grouping.
+`fully-folded` (the default; absent or unknown values use it) forms ordinary
+activity groups from contiguous tool/search/thinking segments between ordinary
+assistant progress paragraphs, and keeps `Bash`/run aliases inside the group
+around them. A `Task` delegation keeps its own topology and is not duplicated
+inside an ordinary group. `command-first` keeps those groups but lifts every
+`Bash`/run alias into a standalone row beside them: adjacent calls stay separate,
+a row's detail stays closed until the user opens it, and a normal assistant
+progress message or a command ends the current group. `flat` renders no nested
+activity groups; the outer disclosure lists tools, commands, thinking and
+progress rows in transcript order. In `command-first` and `fully-folded`, a group
+header appears only when at least two items are visible under the current
+thinking preference; a singleton uses its item disclosure directly, and hidden
+thinking never creates an empty wrapper. All three modes render exactly one
+top-level process disclosure and change neither what a tool received nor what is
+stored.
 
 The ordinary group owning the active execution segment starts open while a turn is
 active, then closes on completion only if untouched; other completed groups start
 closed. An untouched active group remains open when any failed or denied tool has
 been recorded, through later successful recovery, and closes on completion if still
-untouched. These group defaults are unified and do not depend on the thinking
-preference. Group headers summarize count, running state and issue count without
-treating a failed child as a failed turn.
+untouched. These group defaults are unified across modes and do not depend on the
+thinking preference. Group headers summarize count, running state and issue count
+without treating a failed child as a failed turn.
 
-No item payload opens itself: a tool, hosted-search or plan call stays a header row
-until the user opens its disclosure, including a Bash row, whose detail stays closed
-until the user opens it. The activity groups keep their automatic open defaults, so
-a live turn still shows its work. When the `Show thinking` preference is off, the
-live thinking indicator stays visible while completed reasoning rows and excerpts
-are suppressed and empty thinking-only containers are omitted; the stored reasoning
-is retained and reappears when the preference is turned back on.
+The turn disclosure header states the turn's outcome and never echoes the item it
+is working on, because a shell command or search query can be arbitrarily long. It
+reads `Failed`, `Stopped`, `Running`, or `Finished`, with failure outranking stop,
+stop outranking completion, and a live turn reporting running. While running,
+stages a reader can sit in front of (compaction, recovery) name themselves; a
+live reasoning step reads `Thinking`, and momentary stages read as plain running.
+Elapsed time is omitted when the
+transcript recorded no timing rather than shown as zero, and issue counts sit
+beside the label. The disclosure and the levels it reveals share one left edge;
+hierarchy is carried by type size and colour, not by indentation, so a nested
+group header and a run row start exactly where the turn header does.
 
-Group and item are independent controls. Closing an ancestor keeps descendant
-choices and reopening restores them; opening a parent never expands all children.
-User interaction with a child claims its containing group without toggling it, so
-completion cannot close around opened, focused or selected content. Choices use
-stable whole-turn/segment/group/item identities and survive preference changes,
-row remounts and pane eviction through the session reading bookmark. Session
-deletion or renderer restart releases these choices; they are not persisted to
-messages or settings.
+Except for the display mode's Thinking default, no item payload opens itself: a
+tool, hosted-search or plan call stays a header row until the user opens its
+disclosure, including a Bash row, whose detail stays closed until the user opens
+it. The activity groups keep their automatic open defaults, so
+a live turn still shows its work. With `Show thinking` on, Thinking rows expand by
+default in Flat and Commands first and collapse only on user action; Fully folded
+keeps the released exception where earlier rows stay collapsed and only the last
+active row opens while it is live. An expanded Thinking row shows its full
+reasoning markdown; a collapsed one shows only the Thinking indicator, with no
+summary or excerpt. With `Show thinking` off, no completed reasoning row renders;
+only a live whole-run TextShimmer `Thinking` indicator remains while reasoning is
+actively streaming, and empty thinking-only containers are omitted. The stored
+reasoning is retained and reappears when the preference is turned back on.
 
-Each segment header measures only its segment's recorded start/end times, or its
-own live elapsed time while active. Standalone Bash calls, other process segments
-and the final answer do not inflate it; whole-turn state still determines whether
-the active segment is thinking. Only the outer whole-process summary measures the
-entire turn, including its final answer.
+Group, run row and item are independent controls. Closing an ancestor keeps
+descendant choices and reopening restores them; closing the turn's disclosure hides
+every row under it, and reopening restores the groups the user had opened. Opening
+a parent never expands all children. User interaction with a child claims its
+containing group without toggling it, so completion cannot close around opened,
+focused or selected content. Choices use stable turn/group/item identities and
+remain while the retained session pane lives, including preference changes and row
+remounts; pane eviction, deletion or renderer restart reapplies defaults rather
+than persisting disclosure state to messages or settings.
 
-Search/navigation reveals the whole process, process segment and activity group
-that own the named message, and applies each reveal request once. Item-level targeting is not
+Search/navigation reveals the turn process and the activity group that own the
+named message, and applies each reveal request once. Item-level targeting is not
 part of this change. Reasoning hidden by the preference stays hidden until the user
 turns `Show thinking` on. Permission, question, plan/goal approval and other
 pending action cards remain reachable outside a hidden process. See
@@ -2285,18 +2307,21 @@ Lightweight inline disclosure row showing a semantic tool action, its primary
 argument hint, status, and a readable rendering of the result. It follows D071
 and is intentionally not an elevated card.
 
-One contiguous tool/search/thinking segment between progress paragraphs or Bash
-rows becomes an ordinary processing group only when it has two or more visible
-items under the current thinking preference. A singleton uses its item disclosure
-directly, and Task topology keeps its existing container. Bash and run aliases are
-outside segment and ordinary group disclosures but inside the whole-turn process.
-They stay visible with every inner group collapsed while the whole process is
-open, and disappear when it is closed; adjacent Bash rows remain separate. While the
-turn is active, the ordinary group owning the execution segment opens; when it
-settles, an untouched group closes. These group defaults do not depend on the
-thinking preference. No item payload opens itself: a tool, hosted-search or plan
-row stays a header row until the user opens it, whichever item of the group it is,
-including a Bash row whose detail stays closed until opened.
+The turn's process is one disclosure. With `fully-folded` (the default), one
+contiguous tool/search/thinking segment between ordinary progress paragraphs
+becomes an ordinary processing group only when it has two or more visible items
+under the current thinking preference, and `Bash`/run aliases stay inside their
+group. With `command-first`, the groups remain but each `Bash`/run alias renders
+as its own row beside them, and a progress message or command ends a group. With
+`flat`, no group renders and the rows keep transcript order inside the outer
+disclosure. A singleton uses its item disclosure directly, and Task topology
+keeps its existing container. A Bash-only turn still has its one disclosure.
+While the turn is active, the ordinary group owning the execution segment opens;
+when it settles, an untouched group closes. These group defaults do not depend on
+the thinking preference. No item payload opens itself, except the display mode's
+Thinking default: a tool, hosted-search or plan row stays a header row until the
+user opens it, whichever item of the group it is, including a Bash row whose
+detail stays closed until opened.
 
 The group header shows `Processing · 12s` while active or `Processed for 12s`
 after completion, plus bounded item and issue counts. Expanding it reveals the
@@ -2329,13 +2354,15 @@ seconds when non-zero) from one hour onward. Zero-value units are omitted, so
   completion only if untouched; completed groups otherwise start closed. These
   defaults do not depend on the thinking preference. A singleton has no group
   header.
-- Tool/search payloads stay collapsed until the user opens them; no row
-  auto-opens, so a final thinking item never selects an earlier tool. Live
+- Tool/search payloads stay collapsed until the user opens them; no tool/search
+  row auto-opens, so a final thinking item never selects an earlier tool. Live
   thinking follows its own indicator/disclosure policy and never opens sibling
   payloads.
-- Bash and run rows render standalone inside the whole-turn process and outside
-  inner segment/group disclosures; the outer control can hide them together with
-  all other process content. Adjacent Bash rows remain separate.
+- `Bash` and run rows are revealed by the turn's process disclosure. In
+  `fully-folded` they sit inside their group; in `command-first` they sit at its
+  top level beside the groups with adjacent rows separate; in `flat` no groups
+  exist, so they follow transcript order inside the disclosure. They are never
+  siblings of the turn's process, and their details stay closed until opened.
 - The processing group spans the full available assistant column, so expanded
   result details keep a usable width even when the header or payload is short.
 - The visible label is a natural-language action (`Read`, `Ran`, `Searched`),
@@ -2408,16 +2435,17 @@ twice.
 
 | State | Header treatment | Expanded content |
 |---|---|---|
-| Running | Progressive action with readable text and a pulsing marker; a `run` row also shows its spinner and pulses the status dot beside `Working…` | The active multi-item group opens; no item payload opens itself; live thinking follows its own indicator/disclosure policy |
+| Running | Progressive action with readable text and a pulsing marker; a `run` row also shows its spinner and pulses the status dot beside `Working…` | The active multi-item group opens; no tool/search payload opens itself, except the display mode's Thinking default; live thinking follows its own indicator/disclosure policy |
 | Success | Past-tense action + result chips; no green success badge, except a `run` row's dot and `Done` | Result blocks, then arguments if not already shown; an untouched active group closes on completion, while manual group and item choices are retained |
 | Error | Past-tense action + compact danger status; details remain collapsed by default and open only on user request. A `run` row is in this state whenever its command exited nonzero, whatever the call reported (D227) | Error note first, then arguments |
 | Denied | Muted `Denied` status; payload remains closed until requested | Permission result when available |
 
 ### 9.6 Interactions
 
-- Click the row: expand/collapse only that result payload. Payloads start
-  closed. No payload opens itself, so the row the user opens is the only expanded
-  one; failed and denied rows behave the same.
+- Click the row: expand/collapse only that result payload. Tool/search payloads
+  start closed. No tool/search payload opens itself, so the row the user opens is
+  the only expanded one; failed and denied rows behave the same. Thinking rows
+  follow the display mode's default described above.
 - A file path that a row or its result names is a link, not decoration: clicking
   the summary path of a `Read`, `Write`, `Edit`, or `fetch` row, or a path in a
   result's file list or match groups, completes the reference through the same
@@ -3488,9 +3516,13 @@ Anatomy:
   at the caret — the same sentinel-backed chip as a pasted file — whose
   canonical value is the original `entry.path`; the menu closes and that Enter
   does not send. Accepting a directory keeps the literal path in the draft so
-  completion can continue. Entries come from `fs/index` (D124, D209, D362). A
-  truncation footnote appears when the index is capped; without a workspace the
-  menu shows an "open a project" empty state.
+  completion can continue. Entries come from `fs/index` (D124, D209, D362).
+  When that index is capped, a typed query is also searched over the whole
+  listing through `fs/search` once typing pauses, and the found rows merge
+  with the local matches (D669). A truncation footnote appears while the list
+  may be incomplete — the bare `@`, until the first search for the token
+  answers, and when a search is itself capped or unavailable, as in remote
+  sessions; without a workspace the menu shows an "open a project" empty state.
 - Accepting commands and directories inserts text (`/name ` / `@dir/`);
   accepting a completed file inserts the inline chip rather than deleting the
   trigger. Immediately
