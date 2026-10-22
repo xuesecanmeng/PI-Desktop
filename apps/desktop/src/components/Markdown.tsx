@@ -72,11 +72,12 @@ import { absoluteImagePath, remarkLocalImagePaths } from "../lib/markdown-image-
 import { remarkNormalizeWrappedMarkdownLinkDestinations } from "../lib/markdown-link-destinations";
 import { useOpenChatFileRef } from "../hooks/use-preview-target";
 import {
-  useChatFileMenuItems,
+  useChatFileMenu,
   type ChatFileMenuTarget,
 } from "../hooks/use-chat-file-menu";
 import {
   handleMarkdownFileLinkClick,
+  resolveMarkdownFileRef,
   remarkChatFileLinks,
   resolvePreviewTarget,
   safeDecodeUri,
@@ -434,7 +435,7 @@ const MarkdownBaseDirContext = createContext("");
  * File references inside one rendered markdown tree share a single menu.
  *
  * A chip, a link and a local image all name files the same way and offer the
- * same items (`useChatFileMenuItems`), so the tree owns one surface instead of
+ * same menu (`useChatFileMenu`), so the tree owns one surface instead of
  * one per reference. The default is `null` for a tree rendered outside
  * `Markdown`; a reference there keeps the platform's own menu rather than
  * offering an action that could not run.
@@ -624,9 +625,7 @@ function Anchor({
         action on the file's folder. `./` and `../` resolve against the markdown
         file on screen, which is the base this row already holds.
       */
-      const decoded = safeDecodeUri(href);
-      const target = resolvePreviewTarget(decoded, root, baseDir);
-      const ref = target?.kind === "file" ? target.path : toWorkspaceRel(decoded, root, baseDir);
+      const ref = resolveMarkdownFileRef(href, root, baseDir)?.path;
       if (!ref || !openFileMenu) return;
       openFileMenu(event, { path: ref, baseDir });
       return;
@@ -973,16 +972,11 @@ export const Markdown = memo(function Markdown({
     reference the pointer chose and owned here, where it outlives a block that
     streaming may replace.
   */
-  const fileMenuItems = useChatFileMenuItems();
   const {
-    contextMenu: fileMenu,
-    openContextMenu: openFileMenu,
-    closeContextMenu: closeFileMenu,
-  } = useContextMenu();
-  const openMarkdownFileMenu = useCallback<OpenMarkdownFileMenu>(
-    (event, target) => openFileMenu(event, { items: fileMenuItems(target) }),
-    [fileMenuItems, openFileMenu],
-  );
+    fileMenu,
+    openFileMenu: openMarkdownFileMenu,
+    closeFileMenu,
+  } = useChatFileMenu();
   const { t } = useTranslation();
   const fullSourceTooLarge = source.length > MAX_SYNC_MARKDOWN_CODE_UNITS;
   const markdownTailLimit = streaming

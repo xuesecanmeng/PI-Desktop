@@ -166,9 +166,10 @@ export function createProviderCatalogRuntime({
   ): T & { defaultCommandShell: CommandShellId } => {
     const value = (
       settings && typeof settings === "object" ? settings : {}
-    ) as T & { defaultCommandShell?: unknown };
+    ) as T & { defaultCommandShell?: unknown; fileOpenTarget?: unknown };
     return {
       ...(value as T),
+      fileOpenTarget: value.fileOpenTarget === "external" ? "external" : "workpanel",
       infiniteProviderRetry: (value as T & { infiniteProviderRetry?: unknown })
         .infiniteProviderRetry === true,
       keepAwakeWhileRunning: (value as T & { keepAwakeWhileRunning?: unknown })
@@ -200,7 +201,12 @@ export function createProviderCatalogRuntime({
       networkProxy?: unknown;
       macosWindowTranslucency?: unknown;
       transcriptDisplayMode?: unknown;
+      fileOpenTarget?: unknown;
     };
+    if (Object.prototype.hasOwnProperty.call(value, "fileOpenTarget") &&
+      value.fileOpenTarget !== "workpanel" && value.fileOpenTarget !== "external") {
+      throw Object.assign(new Error("fileOpenTarget is invalid"), { errorCode: ErrorCodes.INVALID_PARAMS });
+    }
     if (
       Object.prototype.hasOwnProperty.call(value, "defaultCommandShell") &&
       !isCommandShellId(value.defaultCommandShell)

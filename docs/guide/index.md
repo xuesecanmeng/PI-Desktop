@@ -41,6 +41,19 @@ owns tool execution and the workspace sandbox, the permission gateway, plugin
 host services, RPC, and persistence. The pi sidecar owns the agent loop and
 provider-facing model work.
 
+## Opening file and folder links
+
+In **Settings → AI → Defaults**, **File and folder opening** chooses **Built-in
+viewer** (default) or **System default application** for every file, including
+HTML, and directory. The built-in File Manager shows HTML source; use HTML's
+**Open with → Built-in browser** to run a page. Its submenu also offers File
+Manager and default browser without changing the saved preference. Directory
+links browse in the side panel or open in the system file manager. File-reference
+menus also offer **Open in VS Code** (requires its registered URL handler) and
+**Open in File Explorer** (select the file or open the directory's contents).
+Source-line navigation remains available in the built-in source viewer.
+
+
 ## Working with the docs
 
 The documentation is English-first at the source-of-truth level. The [中文入口](/zh-CN/)

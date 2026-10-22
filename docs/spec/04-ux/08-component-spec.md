@@ -3625,22 +3625,29 @@ Anatomy:
   `pi-desktop/fs/resolveRef` — against the whole open project, its group's
   folders primary first (ADR 0263) — and opens where it resolved: a project file
   in the bundled `pi.file-manager` view (the host `file:` tab when that view is
-  unavailable), a session-scratch or attachment file in the host `file:` tab,
-  and a `.html`/`.htm` page of the primary folder in the side browser. A
+  unavailable), a session-scratch or attachment file in the host `file:` tab.
+  HTML uses those same destinations. The unified file/folder preference can
+  instead choose the OS default application for any file, including HTML, or
+  the system file manager for directories. Built-in directory links browse the
+  host Files tree. HTML's Open with submenu remains a single-click override. A
   positioned `path:line` reference uses the host read-only `file:` tab and
   scrolls the requested line into view. A
   primary-folder file is addressed to the view as a project-relative path and a
   sibling-folder file as an absolute one, which is also how scratch and
   attachment files are addressed. A reference that matches no file opens nothing
   and reports itself. Right-clicking a transcript file reference offers Copy
-  full path and Copy relative path on every surface that names it. Unpositioned
-  `.html` and `.htm` references also offer an **Open with** submenu containing
-  File Manager, built-in browser, and default browser. Each choice completes the
+  full path and Copy relative path on every surface that names it. Existing
+  regular HTML files gain an **Open with** submenu after filesystem resolution;
+  directories with HTML suffixes, directory aliases and missing references do
+  not. The submenu contains File Manager, built-in browser and default browser.
+  Late metadata preserves focus and cannot revive or replace another request. Each choice completes the
   reference first and opens that exact resolved file. Other file types keep the
-  copy actions only; the transcript menu has no **Show in folder** action. A
+  copy actions plus **Open in VS Code** and **Open in File Explorer**; HTML
+  also retains those two actions. Explorer selects a file or opens a directory's
+  contents, using the same resolved canonical path. Remote workspace references
+  keep copy actions without local application actions. A
   file outside the project has no relative path to copy and reports that fact.
-  The OS default application is no longer what this click does. HTTP(S)
-  URLs stay text links. Plain clicks follow the Link open destination setting,
+  HTTP(S) URLs stay text links. Plain clicks follow the Link open destination setting,
   and right-clicking a URL exposes the same external, work-panel, and copy
   actions.
 - States: keyboard-active row uses the shared `kb-active` treatment; empty

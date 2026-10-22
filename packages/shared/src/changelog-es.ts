@@ -5,6 +5,7 @@ export const esEntries: ChangelogEntry[] = [
     version: "0.21.0",
     date: "2026-10-16",
     highlights: [
+      "Elige apertura integrada o del sistema para todos los archivos (incluido HTML) y carpetas; los enlaces también ofrecen VS Code y el explorador de archivos.",
       "Los plugins instalados aparecen como tarjetas en una cuadrícula autoajustable, cada una con una acción clara y su estado de confianza, actualización y alcance a la vista.",
       "Lee valoraciones y reseñas públicas de los plugins del mercado y abre el centro de plugins para escribir una: la aplicación de escritorio nunca inicia sesión.",
       "Los comandos Bash largos continúan como tareas en segundo plano cuando termina el turno, y puedes consultar su salida después.",

@@ -1,7 +1,6 @@
 /**
  * Detection and resolution of file/URL references in chat content so the
- * transcript can preview them: HTML in the work-panel browser, other files
- * with the OS default handler, URLs in the embedded browser.
+ * transcript can open them through the configured file and URL destinations.
  *
  * File detection is deliberately conservative: a bare token only counts as a
  * file when it carries a known extension, so ordinary dotted identifiers in
@@ -112,7 +111,7 @@ function normalizeMarkdownFilePath(url: string): string {
       const pathname = decodeURIComponent(file.pathname);
       const path = /^\/[A-Za-z]:\//.test(pathname) ? pathname.slice(1) : pathname;
       const filePath = parseFileRefPosition(path) ? stripLineRef(path) : path;
-      if (!isAbsoluteFilePath(filePath) || !isLikelyFilePath(filePath)) return url;
+      if (!isAbsoluteFilePath(filePath)) return url;
       return encodeURIComponent(path);
     } catch {
       return url;
@@ -122,8 +121,7 @@ function normalizeMarkdownFilePath(url: string): string {
   // renderer and sanitizer; the anchor decodes this back before file lookup.
   const decoded = safeDecodeUri(url);
   if (parseFileRef(decoded) && parseFileRefPosition(decoded)) return encodeURIComponent(decoded);
-  if (!/^[A-Za-z]:[\\/]/.test(decoded)) return url;
-  if (!parseFileRef(decoded)) return url;
+  if (!/^[A-Za-z]:[\\/]/.test(decoded) && !decoded.startsWith("\\\\")) return url;
   return encodeWindowsPathForHref(decoded);
 }
 
@@ -279,6 +277,19 @@ export function resolvePreviewTarget(
   return rel ? { kind: "file", path: rel, ...(position ?? {}) } : null;
 }
 
+/** Resolve explicit local links consistently for clicks and context menus. */
+export function resolveMarkdownFileRef(
+  href: string,
+  root: string | null | undefined,
+  baseDir?: string,
+): { path: string; line?: number; column?: number } | null {
+  const decoded = safeDecodeUri(href);
+  const target = resolvePreviewTarget(decoded, root, baseDir);
+  if (target?.kind === "file") return target;
+  const path = isAbsoluteFilePath(decoded) ? decoded : toWorkspaceRel(decoded, root, baseDir);
+  return path ? { path } : null;
+}
+
 /** Route a plain click on a local Markdown link through the existing file opener. */
 export function handleMarkdownFileLinkClick(
   event: { preventDefault(): void },
@@ -288,15 +299,13 @@ export function handleMarkdownFileLinkClick(
   openFileRef: (path: string, baseDir?: string, mimeType?: string,
     position?: { line?: number; column?: number }) => void,
 ): boolean {
-  const decoded = safeDecodeUri(href);
-  const target = resolvePreviewTarget(decoded, root, baseDir);
-  const ref = target?.kind === "file" ? target.path : toWorkspaceRel(decoded, root, baseDir);
-  if (!ref) return false;
+  const target = resolveMarkdownFileRef(href, root, baseDir);
+  if (!target) return false;
   event.preventDefault();
-  if (target?.kind === "file" && target.line !== undefined) {
-    openFileRef(ref, baseDir, undefined, { line: target.line, column: target.column });
+  if (target.line !== undefined) {
+    openFileRef(target.path, baseDir, undefined, { line: target.line, column: target.column });
   } else {
-    openFileRef(ref, baseDir);
+    openFileRef(target.path, baseDir);
   }
   return true;
 }

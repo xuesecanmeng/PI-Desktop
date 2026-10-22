@@ -117,8 +117,10 @@ export type FsChatRefMatch = {
   sessionScratch?: boolean;
   /** POSIX path relative to the matched root. */
   relativePath: string;
-  /** Native absolute path of the matched regular file. */
+  /** Native absolute path of the matched file or opted-in directory. */
   absolutePath: string;
+  /** Present only for an exact directory match requested with allowDirectories. */
+  isDirectory?: true;
   matchedBy: FsChatRefMatchKind;
   /**
    * Which folder of the project answered, for `root: "workspace"`. The caller

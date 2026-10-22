@@ -22,6 +22,22 @@ import {
 
 const ROOT = "/Users/dev/project";
 
+test("explicit directory links survive sanitization and reach the guarded file opener", () => {
+  for (const path of [
+    "C:/Users/32759/Desktop/AI-knowledge-base/outputs/26年中级会计实务-按大章拆分",
+    String.raw`D:\person\result folder`,
+    "/Users/dev/project/outputs/result",
+  ]) {
+    const markup = renderSanitizedMarkdown(`[Open directory](<${path}>)`);
+    assertMarkdownLinkClick(markup, path);
+  }
+  assertMarkdownLinkClick(
+    renderSanitizedMarkdown("[Open directory](file:///D:/person/result%20folder)"),
+    "D:/person/result folder",
+  );
+  assert.equal(parseFileRef("outputs/result"), null, "plain directory names are not auto-linked");
+});
+
 function renderSanitizedMarkdown(source, root = "D:\\person") {
   return renderToStaticMarkup(
     React.createElement(ReactMarkdown, {

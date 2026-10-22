@@ -7,6 +7,22 @@ const renderer = await import("../src/lib/api.ts");
 const { createProviderCatalogRuntime } = await import("../electron/main/runtime/provider-catalog.ts");
 const main = createProviderCatalogRuntime({ getHost: () => null, modelsDevCatalog: {} });
 
+test("the unified file preference survives settings updates and defaults in both processes", () => {
+  const stored = { theme: "light", fileOpenTarget: "workpanel" };
+  const received = main.normalizeSettings(structuredClone(stored));
+  const outgoing = renderer.validateSettingsWrite({ ...received, fileOpenTarget: "external" });
+  const persisted = main.validateSettingsWrite(structuredClone(outgoing));
+  assert.equal(persisted.fileOpenTarget, "external");
+  assert.equal(main.normalizeSettings({}).fileOpenTarget, "workpanel");
+  assert.equal(persisted.theme, "light");
+  for (const key of ["fileOpenTarget"]) {
+    for (const invalid of [null, undefined, "browser", false, {}]) {
+      assert.throws(() => renderer.validateSettingsWrite({ [key]: invalid }), new RegExp(`${key} is invalid`));
+      assert.throws(() => main.validateSettingsWrite({ [key]: invalid }), new RegExp(`${key} is invalid`));
+    }
+  }
+});
+
 test("settings read-modify-write preserves disabled retry and unrelated preferences", () => {
   const previousWindow = globalThis.window;
   globalThis.window = { piDesktop: { platform: "win32" } };
@@ -20,6 +36,7 @@ test("settings read-modify-write preserves disabled retry and unrelated preferen
       const original = { defaultMode: "agent", theme: "light", ...stored };
       const received = structuredClone(main.normalizeSettings(original));
       const displayed = renderer.normalizeSettings(received);
+      assert.equal(displayed.fileOpenTarget, "workpanel");
       const edited = { ...displayed, imageGeneration: { providerId: "images", modelId: "image" } };
       const outgoing = renderer.validateSettingsWrite(edited);
       const persisted = main.validateSettingsWrite(structuredClone(outgoing));

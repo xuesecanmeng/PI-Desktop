@@ -171,6 +171,8 @@ export type AppSettings = {
    * `external`: Open directly in the system's default web browser.
    */
   linkOpenTarget?: LinkOpenTarget;
+  /** Destination for local file (including HTML) and directory links; absent keeps the built-in viewer. */
+  fileOpenTarget?: LinkOpenTarget;
   /**
    * Which context figure the composer ring and its summary lead with (D398).
    * `remaining` (default, absent) counts down from 100%; `used` counts up.

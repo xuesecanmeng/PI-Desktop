@@ -8,6 +8,42 @@
 
 ## 1. Goals
 
+### E2E-FILE-opening-preferences-and-directories
+
+- **Preconditions:** Dedicated request worktree, current Main base, reused host
+  dependencies, isolated Electron profile and temporary project/data/worktree.
+  Only system launching and Rust Host are fixture boundaries; production settings
+  controls, Markdown, opener, store, preload, Files tab and Main handlers are used.
+- **Steps:** Open a PDF, HTML and Chinese Windows directory link with default
+  settings; expand a child directory and click its HTML file. Switch the single
+  file/folder preference to system opening, reload it and reopen all three links.
+  Right-click and select VS Code on HTML, a directory, and a filename containing
+  `#`, `%` and spaces. Select Explorer on a file and directory. Reject missing,
+  outside-root, URI-shaped and junction-escape paths at every native action.
+  Isolate the session and reopen the parent-checkout directory reference. Use
+  HTML's retained Open with submenu for all three destinations on the branch copy.
+  Right-click an HTML-named directory, a directory junction with an HTML suffix
+  and a missing HTML file. Hold a real HTML metadata reply while moving keyboard
+  focus, dismissing/replacing the menu, and switching sessions; then release it.
+- **Expected:** Built-in HTML shows source in File Manager; all files and folders
+  share one saved preference, and no separate HTML setting remains. Directories
+  browse in-app or open in the system file manager. HTML's submenu overrides one
+  click without changing the preference. Native menu items resolve the same real
+  file; Explorer selects files and opens directory contents. VS Code receives only
+  an encoded, fixed-scheme file URI. Restricted/missing paths open nothing, and
+  worktree references open the branch copy. Only confirmed regular HTML files
+  gain the special submenu; directory suffixes never select file actions. Late
+  metadata preserves focus and cannot revive or modify a dismissed, replaced or
+  stale-session menu. No real account or user data is used.
+- **Coverage:** `node --test test/file-opening-user-path.test.mjs` from
+  `apps/desktop`; resolver, file-menu, settings-roundtrip, work-panel and worktree
+  suites cover branches. Shared protocol tests cover the new allowlisted channel;
+  configuration sync tests cover the unified portable preference. Actual external
+  application windows are replaced at the OS launch boundary.
+- **Specs:** [Settings IA](../04-ux/06-settings-ia.md),
+  [interaction patterns](../04-ux/09-interaction-patterns.md),
+  [IPC](../03-runtime/01-ipc-protocol.md).
+
 ### E2E-PI-130-kernel-upgrade
 
 - **Preconditions:** Exact Pi 1.3.0 pins and migrated patches in a dedicated
@@ -4851,11 +4887,13 @@ window; opening a normal panel afterward must still work.
 - **Steps**: Open assistant Markdown links to ordinary-session scratch HTML,
   primary project HTML, secondary project-folder HTML, project scratch HTML
   and an isolated session's worktree HTML. Repeat with a `file:` URL containing
-  Unicode/spaces. Interact with each rendered page using native pointer input.
+  Unicode/spaces. Choose Open with → Built-in browser for each HTML link, then
+  interact with the rendered page using native pointer input. Ordinary clicks
+  follow the unified file preference (covered by E2E-FILE-opening-preferences-and-directories).
   Try a missing file, an outside file and a positioned HTML
   source reference. Send a prompt that invokes BrowserPreview through the real
-  sidecar in ordinary, project and isolated conversations. Disable Browser and click
-  again. Switch conversations between cases.
+  sidecar in ordinary, project and isolated conversations. Disable Browser and
+  repeat the explicit browser menu action. Switch conversations between cases.
 - **Expected**: Valid pages render and execute in the side browser at their
   canonical path. Missing/restricted files report errors without guest loads.
   A line reference opens source, not execution. Disabled Browser remains
@@ -13457,8 +13495,9 @@ are withdrawn with ADR 0165.
     canonical path. Quoted and scratch-absolute paths are included.
   - A chip plus a short prompt keeps the user plate content-sized; it does
     not stretch to the `min(82%, 600px)` ceiling.
-  - Clicking an unpositioned project or scratch HTML chip opens the work-panel
-    browser on that file.
+  - With built-in file opening, project HTML opens as source in File Manager;
+    scratch HTML opens in the host viewer. HTML's Open with submenu retains the
+    explicit browser choices. The system preference opens both through the OS.
   - Clicking the workspace source chip opens it in the File Manager work-panel
     view on that file; the host `file:` tab and the OS default application are
     no longer what a chip click opens.
@@ -13582,11 +13621,11 @@ are withdrawn with ADR 0165.
   scratch HTML file. 9) Use Copy full path and Copy relative path, then do the
   same on a reference that resolves in the session scratch store.
 - **Expected**:
-  - Right-clicking a file reference offers Copy full path and Copy relative
-    path on each transcript surface that names it. The transcript menu has no
-    Show in folder item. An unpositioned HTML reference also has a second-level
-    Open with submenu for File Manager, built-in browser, and default browser;
-    non-HTML references keep only the copy actions. Each open choice resolves
+  - Right-clicking a local file reference offers Open in VS Code, Copy full path,
+    Copy relative path and Open in File Explorer on each transcript surface.
+    Explorer selects files and opens directory contents. An HTML reference also
+    retains the Open with submenu for File Manager, built-in browser and default
+    browser. Remote workspace references retain copy actions without native ones. Each open choice resolves
     the reference first, and a missing reference reports itself without opening
     a same-named file elsewhere.
   - A copy writes exactly what it names: the absolute address for the full copy
@@ -13600,8 +13639,9 @@ are withdrawn with ADR 0165.
     is still in the editor and no second tab appears.
   - A scratch or attachment file opens in the host `file:` tab under Open
     resources, addressed by its absolute path, never in the File Manager view.
-  - A plain click on an unpositioned `.html` / `.htm` reference from any
-    project folder or session scratch opens it in the work-panel side browser.
+  - A plain `.html` / `.htm` click follows the unified file preference: project
+    source in File Manager, scratch source in the host viewer, or the OS default
+    application. There is no separate HTML preference.
     In the Open with submenu, File Manager opens the resolved file in that
     plugin view, built-in browser opens the same absolute path in the side
     browser, and default browser uses the host's validated OS file-open path.

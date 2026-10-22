@@ -43,3 +43,15 @@ Renderer 负责呈现；Electron main 协调桌面能力：窗口生命周期、
 不需要为了阅读完整内容不断跳回英文站点。
 
 切换到 [English](/guide/) 查看完整的英文快速开始文档，或使用顶部搜索直接查找协议方法、错误码和决策编号。
+
+## Opening file and folder links
+
+In **Settings → AI → Defaults**, **File and folder opening** chooses **Built-in
+viewer** (default) or **System default application** for every file, including
+HTML, and directory. The built-in File Manager shows HTML source; use HTML's
+**Open with → Built-in browser** to run a page. Its submenu also offers File
+Manager and default browser without changing the saved preference. Directory
+links browse in the side panel or open in the system file manager. File-reference
+menus also offer **Open in VS Code** (requires its registered URL handler) and
+**Open in File Explorer** (select the file or open the directory's contents).
+Source-line navigation remains available in the built-in source viewer.

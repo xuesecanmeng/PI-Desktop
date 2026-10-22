@@ -27,6 +27,15 @@ const {
   toolWorkPanelTab,
 } = await import("../src/lib/work-panel-tabs.ts");
 
+test("directory tabs retain their browsing request across session contexts", () => {
+  const tab = fileWorkPanelTab("C:/project/outputs", undefined, { isDirectory: true });
+  assert.deepEqual(createWorkPanelFileRequest(tab, 12), {
+    path: "C:/project/outputs", seq: 12, isDirectory: true,
+  });
+  const retained = sanitizeWorkPanelTabsState({ tabs: [tab], activeTabId: tab.id });
+  assert.equal(retained.tabs[0].isDirectory, true);
+});
+
 test("work panel tabs open on demand and deduplicate by resource", () => {
   const empty = { tabs: [], activeTabId: null };
   const review = openWorkPanelTabState(empty, toolWorkPanelTab("review"));

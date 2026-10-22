@@ -1252,3 +1252,12 @@ Mode/provider/model/permission/shell 配置和新提示仍然存在
 21. 本机窗口边缘调整大小通过回流更改 MainChat，而不压缩
     固定工作面板；分隔符提交更新提交的首选宽度，
 而分隔线取消恢复之前的宽度（ADR 0033）
+
+### File and folder opening preferences
+
+One searchable, portable `fileOpenTarget` setting in Settings → AI → Defaults chooses Built-in viewer (default) or System default application for all files (including HTML) and directories. HTML opens as source in File Manager by default and retains its Open with submenu for File Manager, built-in browser and default browser overrides. Local file-reference menus also offer Open in VS Code and Open in File Explorer; the latter selects a file or opens a directory’s contents. Directories browse in the host Files tab under the built-in preference. Source positions remain available in built-in source viewing. Remote workspace references keep copy actions without native application actions.
+
+Only an existing regular HTML file confirmed by Main gains the HTML Open with
+submenu. HTML-named directories, directory aliases and missing references keep
+generic actions. Deferred metadata never revives dismissed menus, replaces newer
+requests or crosses session/project changes; keyboard focus is preserved.

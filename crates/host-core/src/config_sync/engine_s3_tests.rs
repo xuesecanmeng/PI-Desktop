@@ -132,6 +132,7 @@ async fn application_show_thinking_roundtrips_and_keeps_local_only_settings() ->
             "thinkingDisplayMode": "detailed",
             "transcriptDisplayMode": "command-first",
             "keepCommandsExpanded": false,
+            "fileOpenTarget": "external",
             "defaultPermissionMode": "accept-edits",
         }),
     )?;
@@ -147,6 +148,7 @@ async fn application_show_thinking_roundtrips_and_keeps_local_only_settings() ->
         assert_eq!(settings["showThinking"], false);
         assert_eq!(settings["transcriptDisplayMode"], "command-first");
         assert_eq!(settings["keepCommandsExpanded"], false);
+        assert_eq!(settings["fileOpenTarget"], "external");
         // The legacy field is still exported so older readers keep working.
         assert_eq!(settings["thinkingDisplayMode"], "detailed");
         // Local-only settings do not travel: the source value never appears.

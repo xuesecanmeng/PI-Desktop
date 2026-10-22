@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { isActiveInProject } from "@pi-desktop/shared";
 import { useAppStore } from "../stores/app-store";
 import { api } from "../lib/api";
-import { isHtmlFilePath, toWorkspaceRel, type ChatPreviewTarget } from "../lib/chat-links";
+import { toWorkspaceRel, type ChatPreviewTarget } from "../lib/chat-links";
 import { openHttpUrl } from "../lib/open-http-url";
 import {
   BROWSER_PLUGIN_TAB,
@@ -86,9 +86,12 @@ export type ResolvedChatFileRef = {
   primary: boolean;
   /** Session-owned generated artifacts, rather than imported attachments. */
   scratch: boolean;
+  isDirectory?: true;
 };
 
 export type ChatFileOpenDestination =
+  | "vscode"
+  | "file-explorer"
   | "file-manager"
   | "built-in-browser"
   | "default-browser";
@@ -159,7 +162,7 @@ async function ensureFileManagerView(workspacePath: string | null): Promise<bool
   }
 }
 
-function useResolveChatFileRef() {
+export function useResolveChatFileRef({ reportErrors = true }: { reportErrors?: boolean } = {}) {
   const paneSessionId = useSlotSessionId();
   const { t } = useTranslation();
   const workspacePath = useAppStore((s) => s.workspace?.path ?? null);
@@ -185,9 +188,10 @@ function useResolveChatFileRef() {
         : null;
       let result;
       try {
-        result = await api.fsResolveRef(anchored ?? raw, ownerId);
-      } catch {
-        showToast(t("chat.fileRefLookupFailed"), { variant: "error" });
+        result = await api.fsResolveRef(anchored ?? raw, ownerId, true);
+      } catch (error) {
+        if (reportErrors) showToast(t("chat.fileRefLookupFailed"), { variant: "error" });
+        else console.warn("File-reference metadata lookup failed", error);
         return null;
       }
       // An isolated session's files live in its worktree, which is outside the
@@ -199,7 +203,7 @@ function useResolveChatFileRef() {
         const key = result.reason === "outside-allowed-roots"
           ? "chat.fileRefRestricted"
           : "chat.fileRefMissing";
-        showToast(t(key, { name: raw }), { variant: "error" });
+        if (reportErrors) showToast(t(key, { name: raw }), { variant: "error" });
         return null;
       }
       if (match.root !== "workspace") {
@@ -210,6 +214,7 @@ function useResolveChatFileRef() {
           inProject: false,
           primary: false,
           scratch: match.sessionScratch === true,
+          ...(match.isDirectory ? { isDirectory: true } : {}),
         };
       }
       // A project group can hold several folders, and a relative path always
@@ -223,18 +228,21 @@ function useResolveChatFileRef() {
         inProject: true,
         primary,
         scratch: false,
+        ...(match.isDirectory ? { isDirectory: true } : {}),
       };
     },
-    [paneSessionId, sessionId, showToast, t, workspacePath],
+    [paneSessionId, reportErrors, sessionId, showToast, t, workspacePath],
   );
 }
 
 /**
- * Open a file reference the conversation mentioned.
+ * Open a file or explicit directory reference the conversation mentioned.
+ * One file preference selects a system handoff or the built-in defaults;
+ * directories use the host directory tree. Explicit native menu actions take
+ * precedence over that preference.
  *
- * A project or session-scratch `.html` page stays with the side browser
- * (ADR 0163): it is a page to run, not a file to read. A direct click on a
- * plain project file starts or retries the bundled file view; a positioned
+ * A direct click on a project file, including HTML, starts or retries the
+ * bundled file view; a positioned
  * `path:line` reference uses the host file tab, which can scroll to the line.
  * The plugin view accepts opaque path locations and has no line-navigation
  * contract, so positioned references keep their path unchanged and use the
@@ -261,7 +269,7 @@ export function useOpenChatFileRef() {
     ) => {
       const line = options?.line;
       const column = options?.column;
-      const destination = options?.destination;
+      const explicitDestination = options?.destination;
       void (async () => {
         const resolved = await resolveRef(path, baseDir);
         if (!resolved) return;
@@ -272,9 +280,13 @@ export function useOpenChatFileRef() {
         ) {
           return;
         }
-        if (destination === "file-manager") {
+        if (explicitDestination === "file-manager") {
           if (current.workspace?.remote) {
             showToast(t("chat.fileManagerOpenFailed"), { variant: "error" });
+            return;
+          }
+          if (resolved.isDirectory) {
+            openFile(resolved.absolutePath, undefined, { isDirectory: true });
             return;
           }
           const ready = await ensureFileManagerView(workspacePath);
@@ -289,56 +301,45 @@ export function useOpenChatFileRef() {
             showToast(t("chat.fileManagerOpenFailed"), { variant: "error" });
             return;
           }
-          openTab(
-            fileManagerPluginTab(
-              resolved.inProject ? resolved.path : resolved.absolutePath,
-            ),
-          );
+          openTab(fileManagerPluginTab(resolved.inProject ? resolved.path : resolved.absolutePath));
           return;
         }
-        if (destination === "built-in-browser") {
-          if (
-            current.workspace?.remote ||
-            !hasPluginView(current.pluginViews, BROWSER_PLUGIN_TAB)
-          ) {
-            showToast(t("chat.builtInBrowserUnavailable"), {
-              variant: "error",
-            });
+        if (explicitDestination === "built-in-browser") {
+          if (resolved.isDirectory || current.workspace?.remote || !hasPluginView(current.pluginViews, BROWSER_PLUGIN_TAB)) {
+            showToast(t("chat.builtInBrowserUnavailable"), { variant: "error" });
             return;
           }
           openUrl(resolved.absolutePath);
           return;
         }
-        if (destination === "default-browser") {
+        if (explicitDestination || current.settings?.fileOpenTarget === "external") {
+          const failure = explicitDestination === "vscode"
+            ? "chat.vscodeOpenFailed"
+            : explicitDestination === "file-explorer"
+              ? "chat.fileExplorerOpenFailed"
+              : "chat.defaultApplicationOpenFailed";
           if (current.workspace?.remote) {
-            showToast(t("chat.defaultBrowserOpenFailed"), {
-              variant: "error",
-            });
+            showToast(t(failure), { variant: "error" });
             return;
           }
           try {
-            await api.fsOpen(resolved.absolutePath, mimeType, sessionId);
+            if (explicitDestination === "vscode") {
+              await api.fsOpenInVSCode(resolved.absolutePath, sessionId);
+            } else if (explicitDestination === "file-explorer") {
+              await api.fsReveal(resolved.absolutePath, sessionId);
+            } else {
+              await api.fsOpen(resolved.absolutePath, mimeType, sessionId);
+            }
           } catch {
-            showToast(t("chat.defaultBrowserOpenFailed"), {
-              variant: "error",
-            });
+            showToast(t(failure), { variant: "error" });
           }
+          return;
+        }
+        if (resolved.isDirectory) {
+          openFile(resolved.absolutePath, undefined, { isDirectory: true });
           return;
         }
         const hasPosition = line !== undefined || column !== undefined;
-        if (
-          !current.workspace?.remote &&
-          !hasPosition &&
-          (resolved.inProject || resolved.scratch) &&
-          isHtmlFilePath(resolved.absolutePath)
-        ) {
-          if (!hasPluginView(current.pluginViews, BROWSER_PLUGIN_TAB)) {
-            showToast(t("panel.pluginView.failed"), { variant: "error" });
-            return;
-          }
-          openUrl(resolved.absolutePath);
-          return;
-        }
         if (!current.workspace?.remote && resolved.inProject && !hasPosition) {
           if (await ensureFileManagerView(workspacePath)) {
             const latest = useAppStore.getState();

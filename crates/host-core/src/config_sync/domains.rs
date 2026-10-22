@@ -45,6 +45,7 @@ pub(crate) const PORTABLE_APPLICATION_FIELDS: &[&str] = &[
     "infiniteProviderRetry",
     "keybindings",
     "linkOpenTarget",
+    "fileOpenTarget",
     "contextUsageDisplay",
     "chatContentMaxWidth",
     "promptEnhancementCustomTemplate",
@@ -107,6 +108,7 @@ pub const DOMAIN_ADAPTERS: &[DomainAdapterSpec] = &[
             "keepCommandsExpanded",
             "keybindings",
             "display bindings",
+            "fileOpenTarget",
             "provider/model bindings",
         ],
         secret_fields: &[],
@@ -638,6 +640,8 @@ mod tests {
         assert!(PORTABLE_APPLICATION_FIELDS.contains(&"thinkingDisplayMode"));
         assert!(PORTABLE_APPLICATION_FIELDS.contains(&"keepCommandsExpanded"));
         let application = adapter_for(DOMAIN_APPLICATION).expect("application adapter");
+        assert!(PORTABLE_APPLICATION_FIELDS.contains(&"fileOpenTarget"));
+        assert!(application.exportable_fields.contains(&"fileOpenTarget"));
         assert!(application.exportable_fields.contains(&"showThinking"));
         assert!(application
             .exportable_fields

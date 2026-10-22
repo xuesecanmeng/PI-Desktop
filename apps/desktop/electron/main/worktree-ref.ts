@@ -16,21 +16,21 @@ export type WorktreeRefContext = { worktree: string; parent: string };
  * the project path (project instructions, MCP tools, an attachment captured
  * from the parent checkout). The session's files live in the worktree, so the
  * original path is outside the allowed roots and the click fails even though
- * the branch has the same file. Relative references, paths already inside the
+ * the branch has the same file or directory. Relative references, paths already inside the
  * worktree, and paths with no worktree counterpart are returned unchanged so
  * the caller keeps reporting the accurate reason.
  */
 export async function rebaseWorktreeRef(
   ref: string,
   context: WorktreeRefContext | null,
-  isFile: (path: string) => Promise<boolean> = defaultIsFile,
+  isOpenablePath: (path: string) => Promise<boolean> = defaultIsFileOrDirectory,
 ): Promise<string> {
   if (!context || !isAbsolute(ref)) return ref;
   if (relativeWithin(context.worktree, ref) !== null) return ref;
   const relativePath = relativeWithin(context.parent, ref);
   if (!relativePath) return ref;
   const candidate = resolve(context.worktree, ...relativePath.split("/"));
-  return (await isFile(candidate)) ? candidate : ref;
+  return (await isOpenablePath(candidate)) ? candidate : ref;
 }
 
 /**
@@ -50,9 +50,10 @@ function relativeWithin(root: string, candidate: string): string | null {
   return candidatePath.slice(rootPath.length + 1);
 }
 
-async function defaultIsFile(path: string): Promise<boolean> {
+async function defaultIsFileOrDirectory(path: string): Promise<boolean> {
   try {
-    return (await stat(path)).isFile();
+    const info = await stat(path);
+    return info.isFile() || info.isDirectory();
   } catch {
     return false;
   }

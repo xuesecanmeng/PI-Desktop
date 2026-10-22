@@ -30,6 +30,24 @@ function roots(options) {
 
 const resolve = (ref, options) => resolveChatFileRef(ref, roots(options));
 
+test("directory resolution is opt-in, exact, and contained", async () => {
+  const workspace = tempTree("directories", ["outputs/报告/one.pdf", "nested/other/two.pdf"]);
+  const options = roots({ workspace });
+  for (const ref of ["outputs/报告", join(workspace, "outputs", "报告"), workspace]) {
+    assert.equal(await resolveChatFileRef(ref, options), null);
+    const match = await resolveChatFileRef(ref, options, { allowDirectories: true });
+    assert.equal(match?.isDirectory, true);
+    assert.equal(match?.root, "workspace");
+  }
+  assert.equal(await resolveChatFileRef("other", options, { allowDirectories: true }), null);
+  assert.equal(await resolveChatFileRef(dirname(workspace), options, { allowDirectories: true }), null);
+  const outside = tempTree("outside-directory", ["secret.txt"]);
+  symlinkSync(outside, join(workspace, "escape"), process.platform === "win32" ? "junction" : "dir");
+  assert.equal(await resolveChatFileRef("escape", options, { allowDirectories: true }), null);
+  assert.equal(await resolveChatFileRef(join(workspace, "escape"), options, { allowDirectories: true }), null);
+  assert.equal((await resolveChatFileRef("one.pdf", options, { allowDirectories: true }))?.isDirectory, undefined);
+});
+
 /**
  * Partial-path completion for chat file references.
  *

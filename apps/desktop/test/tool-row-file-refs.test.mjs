@@ -322,21 +322,22 @@ test("a file from a sibling project folder opens in the view by absolute path", 
   assert.equal(calls.tabs[0].location, "C:/project-second/lib/only-here.ts");
 });
 
-test("a primary-folder HTML page stays with the side browser", async () => {
+test("a primary-folder HTML page opens in File Manager like other files", async () => {
   reset({ pluginView: true, browserPluginView: true });
   nextMatch = projectMatch({ relativePath: "docs/page.html", absolutePath: "C:/project/docs/page.html" });
   await click({ kind: "file", path: "docs/page.html" });
-  assert.deepEqual(calls.tabs, [], "a page to run is not a file to read");
-  assert.deepEqual(calls.urls, [["C:/project/docs/page.html"]]);
+  assert.equal(calls.tabs[0].location, "docs/page.html");
+  assert.deepEqual(calls.urls, []);
 });
 
-test("an HTML reference reports a disabled Browser view without enabling it", async () => {
+test("HTML file viewing does not require or enable the Browser plugin", async () => {
   reset({ pluginView: true });
   nextMatch = projectMatch({ relativePath: "docs/page.html", absolutePath: "C:/project/docs/page.html" });
   await click({ kind: "file", path: "docs/page.html" });
   assert.deepEqual(calls.urls, []);
   assert.deepEqual(calls.enabled, []);
-  assert.deepEqual(calls.toasts[0], ["panel.pluginView.failed:", { variant: "error" }]);
+  assert.equal(calls.tabs[0].location, "docs/page.html");
+  assert.deepEqual(calls.toasts, []);
 });
 
 test("a reference nothing answers reports itself and opens nothing", async () => {

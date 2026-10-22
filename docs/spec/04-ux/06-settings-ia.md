@@ -283,7 +283,8 @@ Settings is a **full-window page** that replaces the app sidebar + main chrome (
   way. The closed trigger sizes to the current label, capped by the settings
   control column.
 - **Defaults** card: the host-backed default operating mode (Agent / Plan / Goal),
-  command shell selection, Link open destination, context usage display
+  command shell selection, Link open destination, File and folder opening,
+  HTML file opening, context usage display
   (remaining or used), the Show thinking toggle, the Transcript display
   segmented control, Enter-to-send control, the infinite provider retry switch,
   and the large text paste threshold. The
@@ -291,7 +292,15 @@ Settings is a **full-window page** that replaces the app sidebar + main chrome (
   failures keep retrying until success; Stop still cancels the turn and the
   setting may continue API usage while enabled. Link open destination uses the Work panel browser by default
   and routes chat, transcript, and plugin HTTP(S) clicks to the system
-  browser when set to Default OS browser. Plugin/settings clicks that want
+  browser when set to Default OS browser. File and folder opening offers
+  Built-in viewer (default) and System default application, persisted as
+  `fileOpenTarget`. It applies to every file, including HTML, and directories.
+  HTML source opens in File Manager under the built-in preference. The host
+  Files tab browses directories in-app; the system preference opens them in
+  the system file manager. The single setting is searchable and portable
+  through configuration sync; absent or unknown stored values preserve built-in
+  viewing. HTML retains its Open with submenu for single-click overrides.
+  Open in VS Code and Open in File Explorer also override the preference. Plugin/settings clicks that want
   the work panel return to chat first so the dock is visible, without
   recording a navigation hop; a missing session falls back to the OS
   browser. Workspace HTML preview, BrowserPreview, OAuth, and Feedback

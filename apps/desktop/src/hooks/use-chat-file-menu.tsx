@@ -1,17 +1,17 @@
 /**
  * The right-click action every file reference in the conversation shares.
  *
- * HTML references expose explicit open destinations in the context menu: the
- * bundled File Manager, built-in browser, and default browser. Each destination
+ * References offer VS Code, the system file manager and path copying; HTML also
+ * keeps its Open with submenu. Each action
  * goes through the same resolver as a normal click, so a reference that resolves
  * to nothing cannot open a lookalike somewhere else.
  *
  * Items are data, exactly as `ContextMenu` takes them: every surface keeps the
  * menu instance it already owns and shares only this vocabulary, so a row that
- * already has items of its own (a markdown link) adds this one instead of
+ * already has items of its own (a markdown link) adds these instead of
  * opening a second surface.
  */
-import { useCallback, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import {
@@ -20,12 +20,15 @@ import {
   IconExternal,
   IconFolderOpen,
   IconGlobe,
+  IconVSCode,
 } from "../components/icons";
 import { isHtmlFilePath } from "../lib/chat-links";
 import { useChatNativeFilesAllowed } from "./use-chat-session-capability";
 import {
   useCopyChatFileRef,
   useOpenChatFileRef,
+  useResolveChatFileRef,
+  type ResolvedChatFileRef,
 } from "./use-preview-target";
 
 export type ChatFileMenuTarget = {
@@ -41,8 +44,16 @@ export function useChatFileMenuItems() {
   const openFileRef = useOpenChatFileRef();
   const copyFileRef = useCopyChatFileRef();
   return useCallback(
-    ({ path, baseDir }: ChatFileMenuTarget): ContextMenuItem[] => [
-      ...(nativeFilesAllowed && isHtmlFilePath(path)
+    ({ path, baseDir }: ChatFileMenuTarget, resolved?: ResolvedChatFileRef): ContextMenuItem[] => [
+      ...(nativeFilesAllowed
+        ? [{
+            id: "open-in-vscode",
+            label: t("chat.openInVSCode"),
+            icon: <IconVSCode size={14} />,
+            onSelect: () => openFileRef(path, baseDir, undefined, { destination: "vscode" }),
+          }]
+        : []),
+      ...(nativeFilesAllowed && resolved && !resolved.isDirectory && isHtmlFilePath(resolved.absolutePath)
         ? [{
             id: "open-with",
             label: t("chat.openWith"),
@@ -52,28 +63,19 @@ export function useChatFileMenuItems() {
                 id: "open-with-file-manager",
                 label: t("chat.openWithFileManager"),
                 icon: <IconFolderOpen size={14} />,
-                onSelect: () =>
-                  openFileRef(path, baseDir, undefined, {
-                    destination: "file-manager",
-                  }),
+                onSelect: () => openFileRef(path, baseDir, undefined, { destination: "file-manager" }),
               },
               {
                 id: "open-with-built-in-browser",
                 label: t("chat.openWithBuiltInBrowser"),
                 icon: <IconBrowser size={14} />,
-                onSelect: () =>
-                  openFileRef(path, baseDir, undefined, {
-                    destination: "built-in-browser",
-                  }),
+                onSelect: () => openFileRef(path, baseDir, undefined, { destination: "built-in-browser" }),
               },
               {
                 id: "open-with-default-browser",
                 label: t("chat.openWithDefaultBrowser"),
                 icon: <IconGlobe size={14} />,
-                onSelect: () =>
-                  openFileRef(path, baseDir, undefined, {
-                    destination: "default-browser",
-                  }),
+                onSelect: () => openFileRef(path, baseDir, undefined, { destination: "default-browser" }),
               },
             ],
           }]
@@ -82,7 +84,7 @@ export function useChatFileMenuItems() {
         id: "copy-full-path",
         label: t("chat.copyFullPath"),
         icon: <IconCopy size={14} />,
-        separatorBefore: nativeFilesAllowed && isHtmlFilePath(path),
+        separatorBefore: nativeFilesAllowed,
         onSelect: () => copyFileRef(path, baseDir, "absolute"),
       },
       {
@@ -91,6 +93,15 @@ export function useChatFileMenuItems() {
         icon: <IconCopy size={14} />,
         onSelect: () => copyFileRef(path, baseDir, "relative"),
       },
+      ...(nativeFilesAllowed
+        ? [{
+            id: "reveal-in-folder",
+            label: t("chat.openInFileExplorer"),
+            icon: <IconFolderOpen size={14} />,
+            separatorBefore: true,
+            onSelect: () => openFileRef(path, baseDir, undefined, { destination: "file-explorer" }),
+          }]
+        : []),
     ],
     [copyFileRef, nativeFilesAllowed, openFileRef, t],
   );
@@ -107,11 +118,18 @@ export function useChatFileMenuItems() {
  */
 export function useChatFileMenu() {
   const fileMenuItems = useChatFileMenuItems();
+  const resolveRef = useResolveChatFileRef({ reportErrors: false });
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenu();
+  useEffect(() => closeContextMenu, [closeContextMenu, resolveRef]);
   const openFileMenu = useCallback(
-    (event: ReactMouseEvent<HTMLElement>, target: ChatFileMenuTarget) =>
-      openContextMenu(event, { items: fileMenuItems(target) }),
-    [fileMenuItems, openContextMenu],
+    (event: ReactMouseEvent<HTMLElement>, target: ChatFileMenuTarget) => {
+      const updateItems = openContextMenu(event, { items: fileMenuItems(target) });
+      if (!isHtmlFilePath(target.path)) return;
+      void resolveRef(target.path, target.baseDir).then((resolved) => {
+        if (resolved && !resolved.isDirectory) updateItems?.(fileMenuItems(target, resolved));
+      });
+    },
+    [fileMenuItems, openContextMenu, resolveRef],
   );
   return { fileMenu: contextMenu, openFileMenu, closeFileMenu: closeContextMenu };
 }

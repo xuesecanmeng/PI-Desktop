@@ -1919,18 +1919,27 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   (`image` with `dataUrl`, or `missing` / `notImage` / `tooLarge`). Same
   containment as `fs/read`. Never returns non-image bytes. Renderer-only;
   not a plugin host API.
-- `fs/reveal({path})` → reveal in Finder. Same containment as `fs/read`.
-- `fs/open({path, mimeType?})` → open an existing regular file with the OS
-  default application. It uses the same realpath containment as `fs/read`,
+- `fs/reveal({path, sessionId?})` selects a regular file in the system file
+  manager or opens a directory's contents. It shares `fs/open` containment,
+  existing-path validation and remote-session restrictions.
+- `fs/openInVSCode({path, sessionId?})` opens an existing contained local file or
+  directory in VS Code. After the same path/remote checks as `fs/open`, Main
+  constructs a fixed `vscode://file` URI with an encoded path (trailing `/` for
+  directories). Input cannot select a URL, scheme, executable or arguments.
+  General external-URL allowlisting and Plugin SDK contracts are unchanged.
+  Launch failure is returned to the renderer; no alternate destination opens.
+- `fs/open({path, mimeType?, sessionId?})` → open an existing regular file with
+  the OS default application, or a directory with the system file manager.
+  It uses the same realpath containment as `fs/read`,
   including rejection of symlink escapes. For a content-addressed
   `attachments/<sha256>` blob declared as `video/mp4`, the host creates a
   `.mp4` symlink inside its private app-data directory before the OS handoff,
   so the extensionless blob has a media association without copying its bytes.
-- `fs/resolveRef({ref, sessionId?})` → `FsChatRefResolveResult`
+- `fs/resolveRef({ref, sessionId?, allowDirectories?})` → `FsChatRefResolveResult`
   (for isolated sessions, lookup and file reads use `worktree.location` rather
   than the parent project checkout; an absolute reference under the parent
   checkout is rebased onto the same relative path in the worktree when that
-  file exists, so the branch copy opens instead of reporting
+  file or opted-in directory exists, so the branch copy opens instead of reporting
   `outside-allowed-roots`)
   (`{ match: FsChatRefMatch | null, reason?: "outside-allowed-roots" }`, the match naming the answering `root`
   (`workspace` / `scratch` / `attachments`), the `relativePath` relative to that
@@ -1965,9 +1974,16 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   wider store; it still searches the session's own one. A reference that matches
   nothing returns `match: null`; an absolute path outside every allowed root
   also returns `reason: "outside-allowed-roots"`, without trying a same-name
-  file inside a root. Resolving never opens anything (ADR 0262).
-- `fs/list` stays workspace-only; traversal outside is rejected
-  (`INVALID_ARGUMENT`).
+  file inside a root. `allowDirectories` defaults to false and must be a boolean
+  when supplied. When true, exact relative or absolute paths may additionally
+  resolve to contained directories, marked `isDirectory: true`; fuzzy searches
+  and attachment hashes remain file-only. Resolving never opens anything
+  (ADR 0262 and [file-opening amendment](../../adr/configurable-file-opening.md)).
+- `fs/list({path, sessionId?})` keeps relative paths workspace-only. Absolute
+  directories may use the same roots and canonical containment as `fs/read`,
+  including session stores and registered project folders. The selected directory
+  becomes the listing's containment base, preserving ignore rules and rejecting
+  escaping child symlinks. Other paths are rejected (`INVALID_ARGUMENT`).
 
 ## 13b. Desktop Menu and Window APIs
 

@@ -12,6 +12,7 @@ import { useAppStore } from "../../stores/app-store";
 import { api } from "../../lib/api";
 import { Markdown } from "../Markdown";
 import { fileDirOf } from "../../lib/chat-links";
+import { useOpenChatFileRef } from "../../hooks/use-preview-target";
 import { Button, cx } from "../ui";
 import { TooltipButton } from "../ui";
 import {
@@ -158,12 +159,14 @@ export function FilesTab() {
   const fileRequest = useAppStore((s) => s.workPanelFileRequest);
   const showToast = useAppStore((s) => s.showToast);
   const sessionId = useAppStore((state) => state.activeSessionId);
+  const openChatFileRef = useOpenChatFileRef();
   const remote = workspace?.remote;
   const root = workspace?.path ?? null;
   const scopeRef = useRef({ root, sessionId });
   scopeRef.current = { root, sessionId };
 
   const [dirs, setDirs] = useState<Record<string, DirState>>({});
+  const [browseRoot, setBrowseRoot] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedMimeType, setSelectedMimeType] = useState<string | undefined>();
@@ -173,14 +176,16 @@ export function FilesTab() {
   const viewerBodyRef = useRef<HTMLDivElement>(null);
   const fileGeneration = useRef(0);
 
-  // Workspace switches reset all browsing state. Guarded so it only fires on
-  // an actual root change: an unconditional [root] effect also runs on the
+  // Scope switches reset browsing state. Guarded so it only fires on an
+  // actual scope change: an unconditional effect also runs on the
   // StrictMode remount, wiping the selection a chat file request just made
   // (first click landed on the tree instead of the file).
-  const prevRoot = useRef(root);
+  const previousScope = useRef({ root, sessionId });
   useEffect(() => {
-    if (prevRoot.current === root) return;
-    prevRoot.current = root;
+    if (previousScope.current.root === root && previousScope.current.sessionId === sessionId) return;
+    previousScope.current = { root, sessionId };
+    fileGeneration.current += 1;
+    setBrowseRoot(null);
     setDirs({});
     setExpanded(new Set());
     setSelected(null);
@@ -188,11 +193,10 @@ export function FilesTab() {
     setSelectedLine(undefined);
     setFile(null);
     setFileError(false);
-  }, [root]);
+  }, [root, sessionId]);
 
   const loadDir = useCallback(
     async (rel: string) => {
-      if (!root) return;
       try {
         const res = await api.fsList(rel, sessionId);
         if (scopeRef.current.root !== root || scopeRef.current.sessionId !== sessionId) return;
@@ -206,8 +210,9 @@ export function FilesTab() {
   );
 
   useEffect(() => {
-    if (root && !dirs[""]) void loadDir("");
-  }, [root, dirs, loadDir]);
+    const path = browseRoot ?? "";
+    if ((root || browseRoot) && !dirs[path]) void loadDir(path);
+  }, [root, browseRoot, dirs, loadDir]);
 
   const toggleDir = useCallback(
     (rel: string) => {
@@ -265,7 +270,7 @@ export function FilesTab() {
     }
   }, [selected, selectedMimeType, sessionId, showToast, t]);
 
-  // Chat-initiated previews: open the file and expand its ancestor folders
+  // Chat requests browse a directory, or open a file and expand its ancestors
   // so "back" lands on a tree that reveals it. Attachment blobs and absolute
   // scratch paths live outside the workspace tree.
   useEffect(() => {
@@ -273,6 +278,19 @@ export function FilesTab() {
     if (fileRequest.seq === handledFileRequestSeq) return;
     handledFileRequestSeq = fileRequest.seq;
     const path = fileRequest.path;
+    if (fileRequest.isDirectory) {
+      fileGeneration.current += 1;
+      setBrowseRoot(path);
+      setDirs({});
+      setExpanded(new Set());
+      setSelected(null);
+      setSelectedMimeType(undefined);
+      setSelectedLine(undefined);
+      setFile(null);
+      setFileError(false);
+      return;
+    }
+    setBrowseRoot(null);
     const isExternal =
       path.startsWith("attachments/") ||
       path.startsWith("/") ||
@@ -329,6 +347,8 @@ export function FilesTab() {
               type="button"
               className="file-tree-row"
               style={{ paddingLeft: 12 + depth * 14 }}
+              aria-expanded={open}
+              title={childRel}
               onClick={() => toggleDir(childRel)}
             >
               <span className={cx("file-tree-caret", open && "open")} aria-hidden>
@@ -347,7 +367,7 @@ export function FilesTab() {
           type="button"
           className={cx("file-tree-row", selected === childRel && "active")}
           style={{ paddingLeft: 12 + depth * 14 + 16 }}
-          onClick={() => void openFile(childRel)}
+          onClick={() => browseRoot ? openChatFileRef(childRel) : void openFile(childRel)}
           title={childRel}
         >
           <IconFileText size={14} />
@@ -428,7 +448,7 @@ export function FilesTab() {
     );
   }
 
-  if (!root) {
+  if (!root && !browseRoot) {
     return (
       <WorkTabEmpty
         icon={IconFolder}
@@ -438,5 +458,15 @@ export function FilesTab() {
     );
   }
 
-  return <div className="file-tree">{renderDir("", 0)}</div>;
+  return (
+    <div className="file-tree">
+      {browseRoot && (
+        <div className="file-viewer-header">
+          <IconFolder size={14} />
+          <span className="file-viewer-path" title={browseRoot}>{browseRoot}</span>
+        </div>
+      )}
+      {renderDir(browseRoot ?? "", 0)}
+    </div>
+  );
 }
