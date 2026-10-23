@@ -60,7 +60,6 @@ import { switchWorkPanelSession } from "./work-panel-slice";
 
 export type SessionSliceDependencies = StoreAccess & {
   runtime: SessionRuntime;
-  applyRecentSessionModel: (sessionId: string) => void;
   decorateSessions: (
     sessions: SessionSummary[],
     meta: Record<string, SessionMeta>,
@@ -149,7 +148,6 @@ export function createSessionSlice({
   get,
   set,
   runtime,
-  applyRecentSessionModel,
   decorateSessions,
   withoutRecordKey,
   sessionModeForPlanningState,
@@ -415,7 +413,6 @@ export function createSessionSlice({
           },
       ) => {
         const record = opts?.record !== false;
-        const activating = get().activeSessionId !== id;
         const commit = (state: AppState) => ({
           ...(state.activeSessionId === id ? {} : switchWorkPanelSession(state, id)),
           ...retainSessionPane(state, id, messages),
@@ -441,7 +438,6 @@ export function createSessionSlice({
             };
           });
         }
-        if (activating) applyRecentSessionModel(id);
       };
 
       const alignWorkspace = async (session?: SessionSummary | null) => {

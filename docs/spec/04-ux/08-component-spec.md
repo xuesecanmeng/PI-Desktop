@@ -3232,13 +3232,12 @@ reasoning-level control.
   model therefore updates the draft Composer's available levels and binding
   default thinking level immediately; the persisted session keeps the same
   exact-model capability after materialization.
-- New and activated configurable local chats inherit the latest actually used
-  available model and thinking level together, including after preference
-  reload. The inherited level is clamped onto the model's enabled set, with
-  `omit` preserved. A legacy recent pair without a level preserves an existing
-  same-model chat's override. Running turns keep their original configuration;
-  the inherited choice applies to the next turn. Remote/native Pi and
-  pending-approval sessions retain their configuration boundaries.
+- New local chats inherit the latest actually used available model and thinking
+  level together, including after preference reload. The inherited level is
+  clamped onto the model's enabled set, with `omit` preserved. Existing chats
+  retain their own model and level on activation, including during a running
+  turn; navigation does not stage another chat's recent choice. Remote/native
+  Pi and pending-approval sessions retain their configuration boundaries.
 - Without a saved level, a new session whose inherited catalog-matched model
   supports reasoning starts at that model's stored default thinking level, clamped
   onto the enabled set. When the binding has no default, it falls back to the
@@ -4085,11 +4084,11 @@ default nor provider configuration. OAuth accounts remain in their separate sect
 1. **Model selection** — chat models are selected in the Composer. Its first
    menu has persistent search, up to three recent available provider/model pairs,
    and an inline Other models disclosure. Without history, it shows all models.
-   New and activated configurable local chats inherit the last actually used
-   available model and thinking level. Only accepted
+   New local chats inherit the last actually used available model and thinking
+   level. Existing chats retain their own combination when activated. Only accepted
    message submission updates that preference; selection and reasoning changes
    alone do not count as usage.
-   Background chats retain their binding until activated. Pending next-turn
+   Background and activated chats retain their own binding. Explicit next-turn
    choices survive refreshes; an idle send waits for configuration persistence,
    and a failed write preserves the draft for retry. The fixed chat-default
    picker and service Make default action are absent. The independent image

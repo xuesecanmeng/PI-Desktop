@@ -47,7 +47,7 @@ test("accepted usage carries model and thinking through reload, new chats and se
   useAppStore.setState({ runningSessions: {}, isRunning: false });
   await useAppStore.getState().selectSession("s1");
   assert.equal(useAppStore.getState().activeSessionId, "s1");
-  assert.equal(useAppStore.getState().sessions.find(s => s.id === "s1").modelId, "b", "switching chats inherits the latest used model");
+  assert.equal(useAppStore.getState().sessions.find(s => s.id === "s1").modelId, "a", "switching chats restores their own model even when its last submission was rejected");
   assert.equal(useAppStore.getState().sessions.find(s => s.id === "s1").thinkingLevel, "high");
   assert.equal(loadRecentModels()[0].modelId, "b", "opening old chat does not count as usage");
   t.mock.method(api, "prompt", async () => ({}));

@@ -254,13 +254,13 @@ execution time, except `omit`, which is preserved on a reasoning model and
 sends no thinking override. An empty binding or a binding containing only
 `off` resolves to `off`.
 
-New chats and activated local Desktop chats inherit the latest actually used
-available provider/model and its saved thinking level. This changes next-turn
-session configuration through the normal configure/staging path; it never
-changes an in-flight runtime or rewrites background chats eagerly. Remote,
-native Pi, model-locked, and pending-approval sessions keep their configuration
-boundaries. A legacy recent pair without a thinking level preserves an existing
-same-model session's stored level.
+New Desktop chats inherit the latest actually used available provider/model
+and its saved thinking level. Existing chats retain their own model and
+thinking level when activated, even when the recent choice has the same model
+with a different level. Navigation neither configures the target nor stages
+another chat's choice for its next turn. Explicit selections continue through
+the normal configure/staging path. Remote, native Pi, model-locked, and
+pending-approval sessions keep their configuration boundaries.
 
 The renderer resolves the inherited level against the selected model's binding,
 preserving `omit` and clamping other values to enabled levels. Without a saved
@@ -461,8 +461,9 @@ as the compact selected-chip label.
 ## 10. Recent chat model policy
 
 New desktop chats inherit the most recently used available chat
-model. An explicit draft selection takes precedence; existing sessions retain
-their pinned provider/model pair. Selecting or submitting an existing chat does
+model and its saved thinking level. An explicit draft selection takes precedence;
+existing sessions retain their pinned provider/model pair and thinking level.
+Selecting or submitting an existing chat does
 not change another chat's binding. Opening a chat alone does not reorder history.
 
 The renderer stores up to 20 provider/model pairs in the local UI preferences,
@@ -622,9 +623,10 @@ same model to the check mark, the toggle and the duplicate guard.
       refresh keeps the cached picker populated
 - [ ] capability badges visible
 - [ ] session model change applies to next turn only
-- [ ] new and activated local chats inherit the latest accepted model and
-      thinking level, including after renderer preference reload; switching
-      alone does not count as usage or alter an in-flight turn
+- [ ] new local chats inherit the latest accepted model and thinking level,
+      including after renderer preference reload; existing chats preserve their
+      own combination on activation, without a configuration write or staged
+      next-turn override, and switching alone does not count as usage
 - [ ] pending configuration survives stale list/catalog refreshes and older
       writes; an immediate send waits for persistence and remains recoverable
       if configuration fails

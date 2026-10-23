@@ -16,9 +16,7 @@ import {
   FORKED_SESSION_WINDOW,
 } from "../../lib/session-fork";
 import { EMPTY_SESSION_WINDOW } from "../../lib/session-create";
-import { availableRecentModels, inheritedSessionModelBinding, inheritedSessionThinkingLevel } from "../../lib/session-model";
-import { applyOptimisticSessionConfiguration } from "../../lib/session-thinking";
-import { sessionAllows } from "../../lib/remote-session-safety";
+import { inheritedSessionModelBinding, inheritedSessionThinkingLevel } from "../../lib/session-model";
 import {
   clearSessionPanes,
   retainSessionPane,
@@ -41,7 +39,6 @@ export type PersistSessionOptions = {
 };
 
 export type SessionCoordination = {
-  applyRecentSessionModel: (sessionId: string) => void;
   flushPendingSessionConfiguration: (sessionId: string) => Promise<void>;
   rememberSessionCompactions: (
     sessionId: string,
@@ -142,29 +139,6 @@ export function createSessionCoordination({
       }
     });
     return settled;
-  }
-
-  function applyRecentSessionModel(sessionId: string): void {
-    const state = get();
-    const session = state.sessions.find((candidate) => candidate.id === sessionId);
-    if (!session || session.source === "pi-native" || !sessionAllows(session, "canConfigureModel") ||
-      state.pendingPlans[sessionId]?.status === "pending") return;
-    const recent = availableRecentModels(state.recentModels, state.providers, state.settings)[0];
-    if (!recent) return;
-    const sameModel = session.providerId === recent.providerId && session.modelId?.toLowerCase() === recent.modelId.toLowerCase();
-    if (sameModel && recent.thinkingLevel === undefined) return;
-    const thinkingLevel = inheritedSessionThinkingLevel({
-      selection: recent, providers: state.providers, providerModels: state.providerModels, recentModels: state.recentModels,
-    });
-    if (sameModel && session.thinkingLevel === thinkingLevel) return;
-    const config = { mode: session.mode, providerId: recent.providerId, modelId: recent.modelId, thinkingLevel };
-    runtime.pendingSessionConfigurations.set(sessionId, runtime.mergeSessionConfiguration(
-      runtime.pendingSessionConfigurations.get(sessionId), config,
-    ));
-    set((current) => ({ sessions: current.sessions.map((candidate) =>
-      candidate.id === sessionId ? applyOptimisticSessionConfiguration(candidate, config) : candidate,
-    ) }));
-    void flushPendingSessionConfiguration(sessionId);
   }
 
   function rememberSessionCompactions(
@@ -363,7 +337,6 @@ export function createSessionCoordination({
   }
 
   return {
-    applyRecentSessionModel,
     flushPendingSessionConfiguration,
     rememberSessionCompactions,
     commitForkedSession,

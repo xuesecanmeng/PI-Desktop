@@ -51,7 +51,7 @@ export function availableRecentModels(
 
 /**
  * Snapshot the most recent available binding when a chat is created.
- * Explicit draft/session fields take priority; activation applies usage separately.
+ * Explicit draft/session fields take priority over renderer-local recent usage.
  */
 export function inheritedSessionModelBinding({
   draft,

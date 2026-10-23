@@ -645,9 +645,10 @@ its own (ADR 0299).
 - Mode is session-scoped and persisted with session metadata
 - Thinking level is session-scoped and persisted with session metadata
 - The renderer remembers the model and thinking level of accepted local chat
-  submissions. Creating or activating a configurable local chat applies that
-  latest available combination through the same next-turn configuration path;
-  the host's per-session value remains authoritative for execution.
+  submissions for newly created chats. Activating an existing chat preserves
+  its own model and thinking level without staging or persisting a recent
+  choice from another chat; the host's per-session value remains authoritative
+  for execution.
 - Host configuration is mutable only while the session is idle. The renderer
   keeps mode/provider/model/thinking/permission controls editable during a run,
   treats the latest selection as next-turn state, and flushes one full

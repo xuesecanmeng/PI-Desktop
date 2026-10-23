@@ -4,133 +4,158 @@ import test from "node:test";
 register(new URL("./helpers/ts-import-hooks.mjs", import.meta.url));
 const { useAppStore } = await import("../src/stores/app-store.ts");
 const { api } = await import("../src/lib/api.ts");
-const { createSessionRuntime } = await import("../src/stores/runtime/session-runtime.ts");
-const { createSessionCoordination } = await import("../src/stores/runtime/session-coordination.ts");
 
 const levels = ["off", "medium", "high", "max"];
 const provider = { id: "p", enabled: true, authKind: "none", supportsReasoning: true, supportedThinkingLevels: levels,
   models: ["latest", "other"].map(id => ({ id, thinkingLevels: levels, defaultThinkingLevel: "medium" })) };
-const session = (id, extra = {}) => ({ id, mode: "agent", title: "Existing conversation", providerId: "p", modelId: "other", thinkingLevel: "medium", messageCount: 0, ...extra });
-function fixture(t, extra = {}) {
-  let state = { sessions: [session("fixture")], providers: [provider], providerModels: {},
-    recentModels: [{ providerId: "p", modelId: "latest", thinkingLevel: "high" }],
-    pendingPlans: {}, runningSessions: {}, sessionMeta: {}, planningStates: {},
-    showToast: t.mock.fn(), refreshSessions: async () => {}, ...extra };
-  const access = { get: () => state, set: update => { state = { ...state, ...(typeof update === "function" ? update(state) : update) }; } };
-  const runtime = createSessionRuntime(access);
-  const coordination = createSessionCoordination({ ...access, runtime,
-    decorateSessions: sessions => sessions, withoutRecordKey: (record, key) => {
-      const next = { ...record }; delete next[key]; return next;
-    }, untitledTaskTitle: () => "Untitled" });
-  return { ...access, runtime, coordination };
-}
-
-test("a running session stages the latest combination until its current turn finishes", async t => {
-  const f = fixture(t, { runningSessions: { fixture: true } });
-  const writes = [];
-  t.mock.method(api, "configureSession", async (id, config) => {
-    writes.push({ id, ...config });
-    return { session: { ...f.get().sessions[0], ...config } };
-  });
-  f.coordination.applyRecentSessionModel("fixture");
-  assert.equal(f.get().sessions[0].modelId, "latest");
-  assert.equal(f.get().sessions[0].thinkingLevel, "high");
-  assert.deepEqual(writes, [], "switching must not reconfigure an in-flight runtime");
-  f.set({ runningSessions: {} });
-  await f.coordination.flushPendingSessionConfiguration("fixture");
-  assert.deepEqual(writes, [{ id: "fixture", mode: "agent", providerId: "p", modelId: "latest", thinkingLevel: "high" }]);
-});
-
-test("remote, native and approval-owned sessions keep their configuration boundary", async t => {
-  const f = fixture(t, { sessions: [session("remote:x", { source: "remote" }), session("native", { source: "pi-native" }),
-    session("approval"), session("locked", { capabilities: { canConfigureModel: false } })],
-    pendingPlans: { approval: { status: "pending" } } });
-  const before = structuredClone(f.get().sessions);
-  const writes = t.mock.method(api, "configureSession", async () => { throw new Error("unexpected write"); });
-  for (const record of before) f.coordination.applyRecentSessionModel(record.id);
-  assert.deepEqual(f.get().sessions, before);
-  assert.equal(writes.mock.callCount(), 0);
-});
-
-test("legacy recent pairs do not reset an existing same-model thinking override", t => {
-  const f = fixture(t, { sessions: [session("fixture", { modelId: "latest", thinkingLevel: "max" })],
-    recentModels: [{ providerId: "p", modelId: "latest" }] });
-  f.coordination.applyRecentSessionModel("fixture");
-  assert.equal(f.get().sessions[0].thinkingLevel, "max");
-  assert.equal(f.runtime.pendingSessionConfigurations.size, 0);
-});
-
-test("switch then send waits for configuration, preserves newer input and stays bound across navigation", async t => {
+let nextFixture = 0;
+function fixture(t, targetConfig = {}) {
   const initial = useAppStore.getState();
-  t.after(() => useAppStore.setState(initial));
-  const sessions = [session("pref-from", { modelId: "latest", thinkingLevel: "high" }), session("pref-to"),
-    session("pref-away", { modelId: "latest", thinkingLevel: "high" })];
-  useAppStore.setState({ sessions, activeSessionId: "pref-from", providers: [provider], providerModels: {},
-    recentModels: [{ providerId: "p", modelId: "latest", thinkingLevel: "high" }],
-    settings: {}, workspace: null, activeProjectPath: null, messages: [], runningSessions: {}, isRunning: false,
+  const previousStorage = globalThis.localStorage;
+  const storage = new Map();
+  globalThis.localStorage = { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) };
+  t.after(() => { useAppStore.setState(initial); globalThis.localStorage = previousStorage; });
+  const prefix = `recent-config-${++nextFixture}`;
+  const session = (id, modelId, thinkingLevel) => ({ id, title: "Existing conversation", mode: "agent", providerId: "p", modelId, thinkingLevel, messageCount: 1 });
+  const from = session(`${prefix}-from`, "latest", "high");
+  const target = { ...session(`${prefix}-to`, "other", "medium"), ...targetConfig };
+  const durable = new Map([from, target].map(record => [record.id, { ...record }]));
+  const history = new Map([from, target].map(record => [record.id, [{ id: `${record.id}-answer`, role: "assistant",
+    content: "Existing answer", createdAt: "2026-10-23T00:00:00.000Z", status: "complete", providerId: "p", modelId: record.modelId }]]));
+  useAppStore.setState({ sessions: [...durable.values()], activeSessionId: from.id, providers: [provider], providerModels: {},
+    recentModels: [{ providerId: "p", modelId: "other", thinkingLevel: "medium" }],
+    settings: {}, workspace: null, activeProjectPath: null, messages: history.get(from.id), runningSessions: {}, isRunning: false,
     pendingPlans: {}, pendingPermissions: {}, pendingAsks: {}, retainedTranscripts: {}, retainedSessionIds: [], selectingSessionId: undefined });
-  t.mock.method(api, "getSession", async id => ({ session: { ...useAppStore.getState().sessions.find(s => s.id === id), messages: [] } }));
-  t.mock.method(api, "listSessions", async () => ({ sessions }));
+  t.mock.method(api, "getSession", async id => ({ session: { ...durable.get(id), messages: history.get(id) } }));
+  t.mock.method(api, "listSessions", async () => ({ sessions: [...durable.values()] }));
   t.mock.method(api, "listProviders", async () => ({ providers: [provider] }));
   t.mock.method(api, "getSettings", async () => ({}));
   t.mock.method(api, "getOnboarding", async () => ({}));
+  const writes = [];
+  const persist = (id, config) => {
+    const session = { ...durable.get(id), ...config };
+    durable.set(id, session);
+    return { session };
+  };
+  const configure = t.mock.method(api, "configureSession", async (id, config) => {
+    writes.push({ id, ...config });
+    return persist(id, config);
+  });
+  const prompts = [];
+  t.mock.method(api, "prompt", async ({ sessionId }) => {
+    const session = durable.get(sessionId);
+    prompts.push({ id: sessionId, modelId: session.modelId, thinkingLevel: session.thinkingLevel });
+    return {};
+  });
+  return { from, target, durable, writes, persist, configure, prompts, current: () => useAppStore.getState().sessions.find(record => record.id === target.id) };
+}
+
+for (const [name, target] of [["different model", {}], ["same model with its own thinking level", { modelId: "latest", thinkingLevel: "max" }]]) {
+  test(`switching existing chats preserves ${name} after accepted usage elsewhere`, async t => {
+    const f = fixture(t, target);
+    assert.equal(await useAppStore.getState().sendPrompt("use the model in A"), true);
+    assert.deepEqual(useAppStore.getState().recentModels[0], { providerId: "p", modelId: "latest", thinkingLevel: "high" });
+    useAppStore.setState({ runningSessions: {}, isRunning: false });
+    await useAppStore.getState().selectSession(f.target.id);
+    assert.equal(useAppStore.getState().activeSessionId, f.target.id);
+    assert.equal(f.current().modelId, f.target.modelId);
+    assert.equal(f.current().thinkingLevel, f.target.thinkingLevel);
+    await useAppStore.getState().selectSession(f.from.id);
+    await useAppStore.getState().selectSession(f.target.id, { record: false });
+    assert.equal(f.current().modelId, f.target.modelId, "cached navigation keeps the target binding");
+    assert.equal(f.current().thinkingLevel, f.target.thinkingLevel);
+    assert.deepEqual(f.writes, [], "navigation must not write another chat's configuration");
+    assert.deepEqual(f.durable.get(f.target.id), f.target);
+    assert.equal(await useAppStore.getState().sendPrompt("continue B with its own selection"), true);
+    assert.deepEqual(f.prompts.at(-1), { id: f.target.id, modelId: f.target.modelId, thinkingLevel: f.target.thinkingLevel });
+  });
+}
+
+test("opening a running chat does not stage the last used model for its next turn", async t => {
+  const f = fixture(t);
+  useAppStore.setState({ recentModels: [{ providerId: "p", modelId: "latest", thinkingLevel: "high" }], runningSessions: { [f.target.id]: true } });
+  await useAppStore.getState().selectSession(f.target.id);
+  assert.equal(f.current().modelId, "other");
+  assert.equal(f.current().thinkingLevel, "medium");
+  useAppStore.setState({ runningSessions: {}, isRunning: false });
+  assert.equal(await useAppStore.getState().sendPrompt("next B turn"), true);
+  assert.deepEqual(f.writes, [], "ending the turn must not reveal an inherited configuration queued by navigation");
+  assert.deepEqual(f.prompts, [{ id: f.target.id, modelId: "other", thinkingLevel: "medium" }]);
+});
+
+test("creating a new chat inherits accepted usage without changing existing chats", async t => {
+  const f = fixture(t);
+  assert.equal(await useAppStore.getState().sendPrompt("use latest at high"), true);
+  useAppStore.setState({ runningSessions: {}, isRunning: false });
+  const createdId = `${f.from.id}-new`;
+  t.mock.method(api, "createSession", async config => ({ session: {
+    ...config, id: createdId, title: "New conversation", messageCount: 0, messages: [],
+  } }));
+  await useAppStore.getState().newSession();
+  const created = useAppStore.getState().sessions.find(record => record.id === createdId);
+  assert.equal(useAppStore.getState().activeSessionId, createdId);
+  assert.equal(created.providerId, "p");
+  assert.equal(created.modelId, "latest");
+  assert.equal(created.thinkingLevel, "high", "new chats retain usage instead of the medium binding default");
+  assert.equal(f.current().modelId, "other");
+  assert.equal(f.current().thinkingLevel, "medium");
+  assert.deepEqual(f.writes, []);
+});
+
+test("explicit next-turn changes survive navigation, older responses and catalog refreshes", async t => {
+  const f = fixture(t);
+  useAppStore.setState({ runningSessions: { [f.target.id]: true } });
+  await useAppStore.getState().selectSession(f.target.id);
+  await useAppStore.getState().configureActiveSession({ mode: "agent", providerId: "p", modelId: "latest", thinkingLevel: "high" });
   let release;
   const barrier = new Promise(resolve => { release = resolve; });
   let releaseNewer;
   const newerBarrier = new Promise(resolve => { releaseNewer = resolve; });
+  let firstStarted;
+  const firstWrite = new Promise(resolve => { firstStarted = resolve; });
   let newerStarted;
   const newerWrite = new Promise(resolve => { newerStarted = resolve; });
-  const requests = [];
-  t.mock.method(api, "configureSession", async (id, config) => {
-    requests.push({ id, ...config });
-    if (requests.length === 1) await barrier;
+  f.configure.mock.mockImplementation(async (id, config) => {
+    f.writes.push({ id, ...config });
+    if (f.writes.length === 1) { firstStarted(); await barrier; }
     else { newerStarted(); await newerBarrier; }
-    return { session: { ...sessions.find(s => s.id === id), ...config } };
+    return f.persist(id, config);
   });
-  const prompts = [];
-  t.mock.method(api, "prompt", async input => {
-    const effective = useAppStore.getState().sessions.find(s => s.id === input.sessionId);
-    prompts.push({ id: input.sessionId, modelId: effective.modelId, thinkingLevel: effective.thinkingLevel });
-    return {};
-  });
-  await useAppStore.getState().selectSession("pref-to");
-  assert.equal(useAppStore.getState().sessions.find(s => s.id === "pref-to").thinkingLevel, "high");
+  useAppStore.setState({ runningSessions: {}, isRunning: false });
+  const submission = useAppStore.getState().sendPrompt("wait for my explicit selection");
+  await firstWrite;
   await useAppStore.getState().configureActiveSession({ mode: "agent", providerId: "p", modelId: "other", thinkingLevel: "max" });
-  const submission = useAppStore.getState().sendPrompt("send with the new selection");
-  assert.deepEqual(prompts, [], "the prompt must wait for the pending configuration write");
+  assert.deepEqual(f.prompts, []);
   await useAppStore.getState().refreshSessions();
-  assert.equal(useAppStore.getState().sessions.find(s => s.id === "pref-to").thinkingLevel, "max", "a durable list refresh must preserve queued next-turn input");
+  assert.equal(f.current().thinkingLevel, "max");
   await useAppStore.getState().refreshProviders();
-  assert.equal(useAppStore.getState().sessions.find(s => s.id === "pref-to").thinkingLevel, "max", "a catalog refresh must preserve queued next-turn input");
-  await useAppStore.getState().selectSession("pref-away");
+  assert.equal(f.current().thinkingLevel, "max");
+  await useAppStore.getState().selectSession(f.from.id);
   release();
   await newerWrite;
-  assert.equal(useAppStore.getState().sessions.find(s => s.id === "pref-to").thinkingLevel, "max", "an older response must not revert the newer optimistic selection");
+  assert.equal(f.current().thinkingLevel, "max", "an older response cannot revert newer explicit input");
   releaseNewer();
   assert.equal(await submission, true);
-  assert.equal(useAppStore.getState().activeSessionId, "pref-away");
-  assert.deepEqual(requests.map(({ modelId, thinkingLevel }) => ({ modelId, thinkingLevel })), [
-    { modelId: "latest", thinkingLevel: "high" }, { modelId: "other", thinkingLevel: "max" },
+  assert.equal(useAppStore.getState().activeSessionId, f.from.id);
+  assert.deepEqual(f.writes, [
+    { id: f.target.id, mode: "agent", providerId: "p", modelId: "latest", thinkingLevel: "high" },
+    { id: f.target.id, mode: "agent", providerId: "p", modelId: "other", thinkingLevel: "max" },
   ]);
-  assert.deepEqual(prompts, [{ id: "pref-to", modelId: "other", thinkingLevel: "max" }]);
+  assert.deepEqual(f.prompts, [{ id: f.target.id, modelId: "other", thinkingLevel: "max" }]);
 });
 
-test("a failed inherited configuration blocks submission and keeps the pending choice recoverable", async t => {
-  const initial = useAppStore.getState();
-  t.after(() => useAppStore.setState(initial));
-  const target = session("pref-failure");
-  useAppStore.setState({ sessions: [target], activeSessionId: null, providers: [provider], providerModels: {},
-    recentModels: [{ providerId: "p", modelId: "latest", thinkingLevel: "high" }],
-    settings: {}, workspace: null, activeProjectPath: null, messages: [], runningSessions: {}, isRunning: false,
-    pendingPlans: {}, retainedTranscripts: {}, retainedSessionIds: [], selectingSessionId: undefined });
-  t.mock.method(api, "getSession", async () => ({ session: { ...target, messages: [] } }));
-  t.mock.method(api, "listSessions", async () => ({ sessions: [target] }));
-  const configure = t.mock.method(api, "configureSession", async () => { throw new Error("configuration unavailable"); });
-  const prompts = t.mock.method(api, "prompt", async () => ({}));
-  await useAppStore.getState().selectSession(target.id);
+test("a failed explicit next-turn configuration blocks submission until retry", async t => {
+  const f = fixture(t);
+  useAppStore.setState({ runningSessions: { [f.target.id]: true } });
+  await useAppStore.getState().selectSession(f.target.id);
+  await useAppStore.getState().configureActiveSession({ mode: "agent", providerId: "p", modelId: "latest", thinkingLevel: "high" });
+  useAppStore.setState({ runningSessions: {}, isRunning: false });
+  f.configure.mock.mockImplementation(async () => { throw new Error("configuration unavailable"); });
   assert.equal(await useAppStore.getState().sendPrompt("keep my draft"), false);
-  assert.equal(prompts.mock.callCount(), 0);
-  assert.equal(useAppStore.getState().sessions.find(s => s.id === target.id).thinkingLevel, "high");
-  configure.mock.mockImplementation(async (id, config) => ({ session: { ...target, ...config, id } }));
+  assert.deepEqual(f.prompts, []);
+  assert.equal(f.current().modelId, "latest");
+  assert.equal(f.current().thinkingLevel, "high");
+  f.configure.mock.mockImplementation(f.persist);
   assert.equal(await useAppStore.getState().sendPrompt("retry my draft"), true);
+  assert.deepEqual(f.prompts, [{ id: f.target.id, modelId: "latest", thinkingLevel: "high" }]);
 });

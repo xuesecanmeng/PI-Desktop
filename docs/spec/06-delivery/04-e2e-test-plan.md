@@ -18406,19 +18406,22 @@ host-created files. The full app's file-preview viewer is covered separately.
 - Use a model with a Medium binding default at High, then create a new chat:
   it inherits that model and High. Reload local preferences and create another
   chat: the same combination is restored. Open an existing configurable local
-  chat after using a different model: its next turn inherits the latest used
-  model and thinking level. A background chat retains its binding until opened.
+  chat after using a different model: its own model and thinking level remain,
+  with no configure request or staged next-turn override. Repeat with two chats
+  using the same model at different thinking levels, cached navigation and Back.
   Opening an old chat or changing a model or reasoning alone does not alter history.
   Send in an older chat: accepted submission updates new-chat inheritance;
   rejected submission does not. Deferred configuration alone does not count
   as usage.
-- Switch chats and immediately send while configuration persistence is pending:
+- Explicitly change a running chat's next-turn selection, then immediately send
+  after it finishes while configuration persistence is pending:
   submission waits for the latest choice. Change the choice during that write,
   refresh sessions/providers with older durable values, and switch away:
   neither refresh nor the older write resets the queued level, and the original
   chat submits with the final choice. Failed configuration blocks submission,
   preserves the draft and pending choice, and succeeds after a retry.
-- A running chat stages the inherited combination until its current turn ends.
+- Opening a running chat preserves its own combination after the turn ends and
+  on the next send; it never stages the global recent choice.
   Remote/native Pi, model-locked, and pending-approval chats are not reconfigured.
   Legacy recent pairs remain readable; invalid saved thinking values are ignored,
   and a legacy same-model pair does not reset an existing manual override.
