@@ -45,9 +45,13 @@ reference-equal, and that runs on every streamed token.
    window covers all loaded history does the transcript call `loadOlder` and
    fetch an older page. Mounting what is already loaded is strictly cheaper than
    an IPC round trip, so it goes first.
-3. Window growth and a fetched page take the **same pre-paint scroll anchor**.
-   Both add height above the reading position, so `prependHeightRef` is captured
-   for both and corrected in the same layout effect.
+3. Window growth and a fetched page hold the **same visible-message anchor**.
+   Its viewport offset is restored when the mounted projection commits, rather
+   than when incoming data changes: a deferred projection can still show the
+   previous page in that earlier commit. Resize observation keeps the anchor
+   through intrinsic placeholder resolution and other late height changes.
+   Further reader scrolling updates the anchor; navigation and new turns release
+   it so restoration cannot undo the reader's movement or pinned follow.
 4. The window **resets per session** and is clamped to the loaded history, so a
    grown budget inherited from the previous session for one frame cannot
    over-mount.

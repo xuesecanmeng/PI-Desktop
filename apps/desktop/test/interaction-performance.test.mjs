@@ -191,7 +191,7 @@ test("a revealed pane restores its own scroll position in the layout phase", () 
   // scroller can be clamped while its content grows off screen, and a passive
   // effect would leave one visible frame at the wrong offset (ADR 0137).
   const revealEffect = transcript.match(
-    /useLayoutEffect\(\(\) => \{([\s\S]*?)\n  \}, \[\n    cancelFollowScroll,\n    paneVisible,\n    releaseDisclosureAnchor,\n    scrollToBottom,\n    sessionId,\n  \]\);/,
+    /useLayoutEffect\(\(\) => \{([\s\S]*?)\n  \}, \[\n    cancelFollowScroll,\n    paneVisible,\n    releaseDisclosureAnchor,\n    releaseHistoryAnchor,\n    scrollToBottom,\n    sessionId,\n  \]\);/,
   )?.[1];
   assert.ok(revealEffect, "the reveal must restore position in a layout effect");
   assert.match(revealEffect, /retainedScrollTopRef\.current = lastLaidOutScrollTopRef\.current/);

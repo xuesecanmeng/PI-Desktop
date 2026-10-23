@@ -2251,7 +2251,12 @@ Renderer: `apps/desktop/src/components/Markdown.tsx` + `apps/desktop/src/lib/shi
   loaded history, not all of it. Reaching the top escalates in two stages —
   mount more of what is already loaded, and fetch an older page only once the
   window covers all of it. Both stages add height above the reading position, so
-  both take the same pre-paint scroll anchor. The window resets per session, and
+  both hold the visible message and its viewport offset. Restoration follows
+  the mounted projection's commit, including deferred rendering, and resize
+  observation compensates later placeholder and content height changes. Input
+  while a page is in flight retains its intended movement; disclosures, search,
+  pane hiding, return to latest, and new turns retain their own scroll ownership.
+  The window resets per session, and
   the spacer stays scoped to the first commit: a permanent spacer under the
   steady-state window would make the user scroll a blank viewport to reach the
   growth trigger. `content-visibility` alone does not bound this cost — it skips

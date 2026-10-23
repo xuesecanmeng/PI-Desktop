@@ -5995,7 +5995,11 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Expected**: The session opens at its newest turn without a blank or
   top-of-history frame, and opening it does not visibly slow down as the
   conversation grows. Each older page prepends without moving the message the
-  user is reading. Paging back reaches the true first message with none skipped
+  user is reading, including deferred projection commits and offscreen rows
+  resolving their intrinsic placeholder heights. Continue scrolling while an
+  older-page read is pending: its completion preserves the new reading position
+  and later input remains free. Return to latest and sending a new turn still
+  resume pinned follow. Paging back reaches the true first message with none skipped
   or duplicated. Re-selection paints from the retained pane: the first frame back
   is the same frame that was left, at the same scroll position, with no dim, no
   blank or skeleton frame, and no rebuild of the rows. A pane the user had
@@ -6007,7 +6011,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Milestone**: M5
 - **Status**: Unit-covered (`transcripts::tests::layout_window_reads_only_the_requested_tail`,
   `sessions::tests::bounded_reads_use_physical_line_positions_not_the_dedup_counter`);
-  UI scenario Draft
+  renderer history anchoring automated by `pnpm test:e2e:transcript-history`
+  (production scroll hook, real React/Chromium layout, synthetic messages and
+  controlled page reads); full Host/pane-switch UI scenario Draft
 
 #### E2E-SESSION-list-refresh-keeps-desktop-responsive: Large session-list refreshes keep Electron responsive
 

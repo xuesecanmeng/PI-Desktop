@@ -79,7 +79,7 @@ test("the transcript restores the held title inside its resize observer", () => 
   // so the correction has to run from the observer, before follow.
   assert.match(
     transcript,
-    /const followScrollNow = useCallback\(\(\) => \{\s*if \(paneVisibleRef\.current && restoreDisclosureAnchor\(\)\) return;\s*if \(!paneVisibleRef\.current \|\| !pinnedRef\.current\) return;\s*cancelFollowScroll\(\);\s*scrollToBottom\(\);/,
+    /const followScrollNow = useCallback\(\(\) => \{\s*if \(paneVisibleRef\.current && restoreDisclosureAnchor\(\)\) return;[\s\S]*?if \(!pinnedRef\.current\) \{\s*restoreHistoryAnchor\(\);\s*return;\s*\}\s*cancelFollowScroll\(\);\s*scrollToBottom\(\);/,
   );
   assert.match(transcript, /new ResizeObserver\(followScrollNow\)/);
   assert.match(transcript, /ro\.observe\(content, \{ box: "border-box" \}\)/);
