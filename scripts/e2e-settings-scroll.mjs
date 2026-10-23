@@ -45,13 +45,25 @@ const { app, BrowserWindow } = require("electron");
 const path = require("node:path");
 app.setPath("userData", path.join(__dirname, "profile"));
 app.whenReady().then(async () => {
+  // Offscreen painting keeps animation frames running in the hidden fixture.
   const win = new BrowserWindow({ show: false, width: 1000, height: 720,
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+    webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
   win.webContents.on("console-message", (event) => console.error(event.message));
   try {
     await win.loadFile(path.join(__dirname, "index.html"));
     const result = await win.webContents.executeJavaScript("window.settingsScrollProbe()");
     console.log("SETTINGS_SCROLL " + JSON.stringify(result));
+    const segments = [];
+    for (const width of [800, 1000, 1440]) {
+      win.setContentSize(width, 720);
+      for (const language of ["en", "zh-CN"]) {
+        for (const scale of [1, 1.5]) {
+          segments.push(await win.webContents.executeJavaScript(
+            "window.settingsSegmentProbe(" + JSON.stringify(language) + "," + scale + ")"));
+        }
+      }
+    }
+    console.log("SETTINGS_SEGMENTS " + JSON.stringify(segments));
     app.exit(0);
   } catch (error) { console.error(error); app.exit(1); }
 });
@@ -68,4 +80,7 @@ app.whenReady().then(async () => {
   const result = output.split(/\r?\n/).find((line) => line.startsWith("SETTINGS_SCROLL "));
   assert(result, output);
   console.log(result);
+  const segments = output.split(/\r?\n/).find((line) => line.startsWith("SETTINGS_SEGMENTS "));
+  assert(segments, output);
+  console.log(segments);
 } finally { await rm(temp, { recursive: true, force: true }); }

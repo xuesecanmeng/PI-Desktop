@@ -276,8 +276,23 @@ export async function transcriptLongHistoryProbe() {
     scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
     await settled();
     const readingTop = scroller.scrollTop;
+    const viewportTop = scroller.getBoundingClientRect().top;
+    const readingRow = [...scroller.querySelectorAll<HTMLElement>("[data-minimap-id], [data-message-id]")]
+      .find((row) => {
+        const rect = row.getBoundingClientRect();
+        return rect.height > 0 && rect.bottom > viewportTop && rect.top < scroller.getBoundingClientRect().bottom;
+      });
+    assert(readingRow, "a visible reading row must exist");
+    const readingOffset = readingRow.getBoundingClientRect().top - viewportTop;
+    const readingSelector = readingRow.dataset.minimapId
+      ? `[data-minimap-id="${CSS.escape(readingRow.dataset.minimapId)}"]`
+      : `[data-message-id="${CSS.escape(readingRow.dataset.messageId!)}"]`;
     await stream(largest, " reader-stays");
-    assert(Math.abs(scroller.scrollTop - readingTop) < 2, "stream stole the reader's scroll position");
+    // Resolved intrinsic heights can change scrollTop while the visible row stays anchored.
+    const restoredRow = scroller.querySelector<HTMLElement>(readingSelector);
+    const restoredOffset = restoredRow ? restoredRow.getBoundingClientRect().top - scroller.getBoundingClientRect().top : null;
+    assert(restoredOffset !== null && Math.abs(restoredOffset - readingOffset) < 2,
+      `stream moved the reading row (${readingOffset} -> ${restoredOffset}; scrollTop=${readingTop} -> ${scroller.scrollTop})`);
 
     // Terminal re-key must replace exactly the provisional row, survive cache
     // reselection and expose fresh copy text through the real turn toolbar.

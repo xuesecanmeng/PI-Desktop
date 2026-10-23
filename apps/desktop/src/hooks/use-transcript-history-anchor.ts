@@ -30,7 +30,8 @@ export function useTranscriptHistoryAnchor(
     const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const previousTop = Math.min(position.scrollTop, maxTop);
     const offset = position.offset - (scroller.scrollTop - previousTop);
-    if (!restoreTranscriptReadingPosition(scroller, content, { ...position, offset })) {
+    // A live anchor's fallback must not replay a bookmark older than reader input.
+    if (!restoreTranscriptReadingPosition(scroller, content, { ...position, offset, scrollTop: scroller.scrollTop })) {
       release();
       return false;
     }

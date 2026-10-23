@@ -35,6 +35,34 @@ async fn create(
     .unwrap();
     (path, session["session"]["id"].as_str().unwrap().to_string())
 }
+
+async fn approve_read_if_requested(
+    state: &Arc<Mutex<AppState>>,
+    tx: &mpsc::UnboundedSender<String>,
+    rx: &mut mpsc::UnboundedReceiver<String>,
+    request: Value,
+) -> Value {
+    if request["method"] != "permissions.request" {
+        return request;
+    }
+    assert_eq!(request["params"]["toolName"], "Read");
+    handle_request(
+        state.clone(),
+        "permissions.resolve",
+        json!({"requestId":request["params"]["requestId"],"decision":"allow-once"}),
+        tx.clone(),
+    )
+    .await
+    .unwrap();
+    serde_json::from_str(
+        &tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap()
+}
+
 #[tokio::test]
 async fn remote_project_uses_local_lifecycle_without_probing_remote_directory() {
     let (dir, state, tx, _rx) = fixture();
@@ -145,6 +173,7 @@ async fn remote_read_dispatch_is_local_approval_then_relay_never_local_runner() 
             .unwrap(),
     )
     .unwrap();
+    let request = approve_read_if_requested(&state, &tx, &mut rx, request).await;
     assert_eq!(request["method"], "tools.remoteExecute");
     assert_eq!(request["params"]["remoteWorkspace"]["path"], "/srv/work");
     handle_request(state.clone(),"tools.remoteComplete",json!({"requestId":request["params"]["requestId"],"result":{"ok":true,"content":{"text":"Remote content"}}}),tx.clone()).await.unwrap();
@@ -193,15 +222,18 @@ async fn denied_remote_write_and_cancelled_read_never_run_locally() {
             .unwrap(),
     )
     .unwrap();
+    let request = approve_read_if_requested(&state, &tx, &mut rx, request).await;
     assert_eq!(request["method"], "tools.remoteExecute");
     handle_request(
         state.clone(),
         "tools.abort",
-        json!({"sessionId":id,"toolCallId":"read-b"}),
+        json!({"sessionId":id,"toolCallId":"read-b","toolName":"Read"}),
         tx.clone(),
     )
     .await
     .unwrap();
+    let abort_notification: Value = serde_json::from_str(&rx.recv().await.unwrap()).unwrap();
+    assert_eq!(abort_notification["method"], "tools.remoteAbort");
     assert_eq!(read.await.unwrap().unwrap()["errorCode"], "TOOL_ABORTED");
     assert!(state.lock().await.remote_execs.is_empty());
 }
