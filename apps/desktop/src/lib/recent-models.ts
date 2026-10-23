@@ -1,6 +1,7 @@
 import type { SessionModelRef } from "./session-model";
+import { isSessionThinkingLevel, type SessionThinkingLevel } from "@pi-desktop/shared";
 
-export type RecentModel = { providerId: string; modelId: string };
+export type RecentModel = { providerId: string; modelId: string; thinkingLevel?: SessionThinkingLevel };
 const KEY = "pi.desktop.recentModels";
 const LIMIT = 20;
 
@@ -8,9 +9,11 @@ export function sameRecentModel(left: RecentModel, right: RecentModel): boolean 
   return left.providerId === right.providerId && left.modelId.toLowerCase() === right.modelId.toLowerCase();
 }
 
-export function rememberModelInList(list: readonly RecentModel[], model: SessionModelRef): RecentModel[] {
+export function rememberModelInList(list: readonly RecentModel[], model: SessionModelRef & { thinkingLevel?: SessionThinkingLevel }): RecentModel[] {
   if (!model.providerId?.trim() || !model.modelId?.trim()) return [...list];
-  const selected = { providerId: model.providerId, modelId: model.modelId };
+  const selected = { providerId: model.providerId, modelId: model.modelId,
+    ...(isSessionThinkingLevel(model.thinkingLevel) ? { thinkingLevel: model.thinkingLevel } : {}),
+  };
   return [selected, ...list.filter(entry => !sameRecentModel(entry, selected))].slice(0, LIMIT);
 }
 

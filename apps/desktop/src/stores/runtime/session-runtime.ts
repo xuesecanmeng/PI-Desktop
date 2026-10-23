@@ -16,6 +16,7 @@ import {
 } from "../../lib/session-transcript";
 import { getSessionMessageSnapshot, getSessionToolMessagePositions } from "../../lib/session-transcript-updates";
 import { sessionReadLooksEmpty } from "../../lib/session-transcript-read";
+import { applyOptimisticSessionConfiguration } from "../../lib/session-thinking";
 import { isAutomationSession } from "../../lib/session-origin";
 import { sessionIsArchived, type SessionMeta } from "../../lib/sidebar-preferences";
 import {
@@ -89,6 +90,7 @@ export type SessionRuntime = {
     current: SessionConfiguration | undefined,
     next: SessionConfiguration,
   ) => SessionConfiguration;
+  projectSessionConfiguration: (session: SessionSummary) => SessionSummary;
   queueWorkspaceAlignment: <T>(task: () => Promise<T>) => Promise<T>;
   beginSessionSelection: (id: string, intent: number) => SessionSelection;
   isCurrentSessionSelection: (selection: SessionSelection) => boolean;
@@ -438,6 +440,10 @@ export function createSessionRuntime({ get, set }: StoreAccess): SessionRuntime 
         if (value !== undefined) merged[key] = value;
       }
       return merged as SessionConfiguration;
+    },
+    projectSessionConfiguration: (session) => {
+      const pending = pendingSessionConfigurations.get(session.id);
+      return pending ? applyOptimisticSessionConfiguration(session, pending) : session;
     },
     queueWorkspaceAlignment,
     beginSessionSelection: (id, intent) => {

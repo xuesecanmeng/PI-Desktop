@@ -38,6 +38,7 @@ const sessionIpcSource = await readMainModule("ipc/session-ipc.ts");
 const sessionLaunchSource = await readMainModule("runtime/session-launch.ts");
 const storeSource = await readStoreSource();
 const sessionCoordinationSource = await readStoreModule("runtime/session-coordination.ts");
+const sessionModelSource = await readFile(new URL("../src/lib/session-model.ts", import.meta.url), "utf8");
 const modelMenuSource = await readFile(
   new URL(
     "../src/features/chat/composer/hooks/useComposerModelMenu.ts",
@@ -195,20 +196,20 @@ test("draft Composer thinking follows the exact model selected in its menu", () 
     composerSource,
     /const nextThinkingLevel = selectedSameModel\s*\?\s*thinkingLevelForProvider\(nextModelProvider, thinkingLevel\)[\s\S]*?initialThinkingLevelForBinding\([\s\S]*?initialThinkingLevelForUnmatchedModel\(/,
   );
-  assert.match(composerSource, /const selectedBinding = provider\?\.models\.find/);
+  assert.match(composerSource, /inheritedSessionThinkingLevel/);
   assert.match(
     composerSource,
-    /const draftThinkingLevel = selectedModelInfo\?\.catalogSource === "models\.dev"\s*\?\s*initialThinkingLevelForBinding\(/,
+    /const draftThinkingLevel = inheritedSessionThinkingLevel\(\{\s*selection: selectedModel, providers, providerModels, recentModels,/,
   );
   assert.match(composerSource, /initialThinkingLevelForUnmatchedModel\(/);
   assert.match(modelMenuSource, /initialThinkingLevelForUnmatchedModel\(/);
-  assert.match(sessionCoordinationSource, /initialThinkingLevelForUnmatchedModel\(/);
+  assert.match(sessionModelSource, /initialThinkingLevelForUnmatchedModel\(/);
   assert.match(modelMenuSource, /nextModel\?\.catalogSource === "models\.dev"/);
-  assert.match(sessionCoordinationSource, /catalogModel\?\.catalogSource === "models\.dev"/);
+  assert.match(sessionModelSource, /catalogModel\?\.catalogSource === "models\.dev"/);
   assert.doesNotMatch(composerSource, /highestSupportedThinkingLevel/);
 });
 
-test("new sessions default to the selected model binding's thinking level", () => {
+test("new sessions use the same recent-thinking resolver as the Composer", () => {
   const materializeSource =
     sessionCoordinationSource.match(
       /async function persistSessionAndSelect[\s\S]*?\n  }\n\n  async function materializeDraftSession/,
@@ -217,8 +218,8 @@ test("new sessions default to the selected model binding's thinking level", () =
     materializeSource.length > 0,
     "materializeDraftSession implementation not found",
   );
-  assert.match(materializeSource, /initialThinkingLevelForBinding\(/);
-  assert.match(materializeSource, /inheritedBinding/);
+  assert.match(materializeSource, /inheritedSessionThinkingLevel\(/);
+  assert.match(materializeSource, /recentModels: state\.recentModels/);
   assert.match(
     materializeSource,
     /thinkingLevel:[\s\S]*?defaultThinkingLevel/,

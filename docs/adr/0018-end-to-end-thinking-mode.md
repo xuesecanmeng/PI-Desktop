@@ -52,6 +52,11 @@ an end-to-end runtime implementation.
 
 - Reasoning selection survives restart and applies to the next turn in that
   session.
+- Renderer-local recent usage also remembers the model and thinking level
+  together. As of 2026-10-23, creating or activating a configurable local chat
+  applies the last accepted combination through `session.configure` or its
+  next-turn staging path. Execution still uses durable per-session metadata;
+  an in-flight runtime does not observe the inherited choice.
 - Sparse model capability sets, including models that cannot fully disable
   reasoning and boolean-like custom sets such as `["off","high"]`, resolve
   consistently across Settings, Composer, main, and sidecar.

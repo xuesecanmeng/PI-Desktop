@@ -406,7 +406,7 @@ CREATE TABLE kv (
 |---|---|
 | `app` | the settings blob (`settings.get/set`), `currentProjectId`. Optional `networkProxy` (`mode`/`url`/`bypass`) is a JSON field in that blob: `url`/`bypass` survive a switch to System or Direct and are applied only in Custom mode (issue #1541); no schema version bump (D340) |
 | `ui` | non-critical UI state the renderer asks the host to keep |
-| `cache` | model-refresh stamps, recent model refs (spec 13 §3) |
+| `cache` | model-refresh stamps |
 | `plugin:<id>` | per-plugin settings; uninstall = `DELETE WHERE ns = ?` |
 | `projectMemory` | durable user-authored context keyed by canonical project path; structured values contain `format: "entries-v1"`, visual `entries`, derived `content`, and `updatedAt` |
 
@@ -574,8 +574,10 @@ CREATE TABLE models (
 ```
 
 Refresh (spec 13 §6/§9) upserts `discovered` rows and **never overwrites
-`source='user'`** rows. Recent-model MRU stays in `kv(cache)` — it is a
-bounded display list, not relational data.
+`source='user'`** rows. Recent-model MRU lives in renderer-local
+`localStorage` (`pi.desktop.recentModels`, spec 13 §3), as a bounded ordered
+list of provider/model pairs with an optional thinking level. Legacy pairs
+remain readable; this preference does not require a host schema migration.
 
 ### 4.5 sessions
 

@@ -6,12 +6,9 @@ import type {
 } from "@pi-desktop/shared";
 import {
   contextCompactionMark,
-  initialThinkingLevelForBinding,
-  initialThinkingLevelForUnmatchedModel,
   normalizeMode,
 } from "@pi-desktop/shared";
 import { api } from "../../lib/api";
-import { sameComposerModelId } from "../../lib/composer-models";
 import { scheduleHomeDraftAdopt } from "../../lib/composer-draft-cache";
 import {
   commitForkedSessionState,
@@ -19,7 +16,9 @@ import {
   FORKED_SESSION_WINDOW,
 } from "../../lib/session-fork";
 import { EMPTY_SESSION_WINDOW } from "../../lib/session-create";
-import { inheritedSessionModelBinding } from "../../lib/session-model";
+import { availableRecentModels, inheritedSessionModelBinding, inheritedSessionThinkingLevel } from "../../lib/session-model";
+import { applyOptimisticSessionConfiguration } from "../../lib/session-thinking";
+import { sessionAllows } from "../../lib/remote-session-safety";
 import {
   clearSessionPanes,
   retainSessionPane,
@@ -42,6 +41,7 @@ export type PersistSessionOptions = {
 };
 
 export type SessionCoordination = {
+  applyRecentSessionModel: (sessionId: string) => void;
   flushPendingSessionConfiguration: (sessionId: string) => Promise<void>;
   rememberSessionCompactions: (
     sessionId: string,
@@ -100,7 +100,7 @@ export function createSessionCoordination({
             sessions: state.sessions.map((session) =>
               session.id === sessionId
                 ? {
-                    ...result.session,
+                    ...runtime.projectSessionConfiguration(result.session),
                     pinned: sessionIsPinned(sessionId, state.sessionMeta),
                     archived: sessionIsArchived(sessionId, state.sessionMeta),
                   }
@@ -142,6 +142,29 @@ export function createSessionCoordination({
       }
     });
     return settled;
+  }
+
+  function applyRecentSessionModel(sessionId: string): void {
+    const state = get();
+    const session = state.sessions.find((candidate) => candidate.id === sessionId);
+    if (!session || session.source === "pi-native" || !sessionAllows(session, "canConfigureModel") ||
+      state.pendingPlans[sessionId]?.status === "pending") return;
+    const recent = availableRecentModels(state.recentModels, state.providers, state.settings)[0];
+    if (!recent) return;
+    const sameModel = session.providerId === recent.providerId && session.modelId?.toLowerCase() === recent.modelId.toLowerCase();
+    if (sameModel && recent.thinkingLevel === undefined) return;
+    const thinkingLevel = inheritedSessionThinkingLevel({
+      selection: recent, providers: state.providers, providerModels: state.providerModels, recentModels: state.recentModels,
+    });
+    if (sameModel && session.thinkingLevel === thinkingLevel) return;
+    const config = { mode: session.mode, providerId: recent.providerId, modelId: recent.modelId, thinkingLevel };
+    runtime.pendingSessionConfigurations.set(sessionId, runtime.mergeSessionConfiguration(
+      runtime.pendingSessionConfigurations.get(sessionId), config,
+    ));
+    set((current) => ({ sessions: current.sessions.map((candidate) =>
+      candidate.id === sessionId ? applyOptimisticSessionConfiguration(candidate, config) : candidate,
+    ) }));
+    void flushPendingSessionConfiguration(sessionId);
   }
 
   function rememberSessionCompactions(
@@ -290,26 +313,10 @@ export function createSessionCoordination({
       providers: state.providers,
       recentModels: state.recentModels,
     });
-    const defaultProvider = state.providers.find(
-      (provider) => provider.id === inherited.providerId,
-    );
-    const inheritedBinding = defaultProvider?.models.find((candidate) =>
-      sameComposerModelId(candidate.id, inherited.modelId ?? ""),
-    );
-    const catalogModel = inherited.providerId && inherited.modelId
-      ? state.providerModels[inherited.providerId]?.find((candidate) =>
-          sameComposerModelId(candidate.modelId, inherited.modelId ?? ""),
-        )
-      : undefined;
-    const defaultThinkingLevel = catalogModel?.catalogSource === "models.dev"
-      ? initialThinkingLevelForBinding(
-          inheritedBinding,
-          defaultProvider?.supportedThinkingLevels,
-        )
-      : initialThinkingLevelForUnmatchedModel(
-          inheritedBinding,
-          defaultProvider?.supportedThinkingLevels,
-        );
+    const defaultThinkingLevel = inheritedSessionThinkingLevel({
+      selection: inherited, providers: state.providers, providerModels: state.providerModels,
+      recentModels: state.recentModels, thinkingLevel: draftConfig?.thinkingLevel,
+    });
     const previousSessionId = state.activeSessionId;
     revealEmptyCreatingSession(active);
     let created: Awaited<ReturnType<typeof api.createSession>>;
@@ -317,7 +324,7 @@ export function createSessionCoordination({
       created = await api.createSession({
         title: untitledTaskTitle(),
         mode: draftConfig?.mode ?? normalizeMode(settings?.defaultMode),
-        thinkingLevel: draftConfig?.thinkingLevel ?? defaultThinkingLevel,
+        thinkingLevel: defaultThinkingLevel,
         permissionMode: draftConfig?.permissionMode,
         providerId: inherited.providerId,
         modelId: inherited.modelId,
@@ -356,6 +363,7 @@ export function createSessionCoordination({
   }
 
   return {
+    applyRecentSessionModel,
     flushPendingSessionConfiguration,
     rememberSessionCompactions,
     commitForkedSession,

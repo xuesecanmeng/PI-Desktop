@@ -17,6 +17,8 @@ test("sending the first prompt derives a replaceable title instead of renaming",
   const previousWindow = globalThis.window;
   try {
     const { createQueueSlice } = await server.ssrLoadModule("/src/stores/slices/queue-slice.ts");
+    const { createSessionRuntime } = await server.ssrLoadModule("/src/stores/runtime/session-runtime.ts");
+    const { createSessionCoordination } = await server.ssrLoadModule("/src/stores/runtime/session-coordination.ts");
     const invoked = [];
     let refreshed = 0;
     globalThis.window = { piDesktop: { invoke: async (channel, ...args) => {
@@ -39,19 +41,19 @@ test("sending the first prompt derives a replaceable title instead of renaming",
         refreshed += 1;
       },
     };
-    const runtime = {
-      submittedComposerDrafts: new Map(),
-      sessionTranscriptCache: new Map(),
-      insertOptimisticUserMessage() {},
-      retractOptimisticUserMessage() {},
-    };
-    const slice = createQueueSlice({
+    const access = {
       get: () => state,
       set: (update) => {
         const next = typeof update === "function" ? update(state) : update;
         state = { ...state, ...next };
       },
+    };
+    const runtime = createSessionRuntime(access);
+    const coordination = createSessionCoordination({ ...access, runtime });
+    const slice = createQueueSlice({
+      ...access,
       runtime,
+      flushPendingSessionConfiguration: coordination.flushPendingSessionConfiguration,
       promptAttachmentsFromDraft: () => [],
       withoutRecordKey: (record, key) => {
         const next = { ...record };

@@ -8,16 +8,18 @@ const { useAppStore, materializeDraftSession } = await import("../src/stores/app
 const { api } = await import("../src/lib/api.ts");
 const { loadRecentModels } = await import("../src/lib/recent-models.ts");
 
-test("only accepted message submission updates recent models and new-chat inheritance", async t => {
+test("accepted usage carries model and thinking through reload, new chats and session switches", async t => {
   await i18n.init({ lng: "en", resources: { en: { translation: en } } });
   const previousStorage = globalThis.localStorage;
   const storage = new Map();
   globalThis.localStorage = { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) };
   t.after(() => { globalThis.localStorage = previousStorage; });
-  const provider = { id: "p", enabled: true, authKind: "none", models: [{ id: "a" }, { id: "b" }] };
+  const provider = { id: "p", enabled: true, authKind: "none", supportsReasoning: true, supportedThinkingLevels: ["off", "medium", "high"],
+    models: ["a", "b"].map(id => ({ id, thinkingLevels: ["off", "medium", "high"], defaultThinkingLevel: "medium" })) };
   useAppStore.setState({ providers: [provider], activeSessionId: null, sessions: [], recentModels: [], draftConfiguration: null,
+    providerModels: { p: ["a", "b"].map(modelId => ({ modelId, catalogSource: "models.dev" })) },
     settings: { defaultProviderId: "p", defaultModelId: "a", defaultMode: "agent" }, workspace: null });
-  const configure = modelId => useAppStore.getState().configureActiveSession({ mode: "agent", providerId: "p", modelId, thinkingLevel: "off" });
+  const configure = (modelId, thinkingLevel = "high") => useAppStore.getState().configureActiveSession({ mode: "agent", providerId: "p", modelId, thinkingLevel });
   let nextId = 0;
   t.mock.method(api, "createSession", async config => ({ session: { ...config, id: `s${++nextId}`, title: "Existing conversation", messages: [] } }));
   t.mock.method(api, "configureSession", async (id, config) => ({ session: {
@@ -28,7 +30,7 @@ test("only accepted message submission updates recent models and new-chat inheri
   assert.deepEqual(loadRecentModels(), [], "clicking a model is not usage");
   await materializeDraftSession();
   assert.equal(await useAppStore.getState().sendPrompt("use b"), true);
-  assert.deepEqual(loadRecentModels(), [{ providerId: "p", modelId: "b" }]);
+  assert.deepEqual(loadRecentModels(), [{ providerId: "p", modelId: "b", thinkingLevel: "high" }]);
   useAppStore.setState({ runningSessions: {}, isRunning: false });
   await configure("a");
   assert.equal(loadRecentModels()[0].modelId, "b", "configuration alone does not reorder history");
@@ -38,19 +40,23 @@ test("only accepted message submission updates recent models and new-chat inheri
   useAppStore.setState({ activeSessionId: null, draftConfiguration: null, recentModels: loadRecentModels() });
   await materializeDraftSession();
   assert.equal(useAppStore.getState().sessions.find(s => s.id === "s2").modelId, "b", "new chat inherits actual usage after reload");
+  assert.equal(useAppStore.getState().sessions.find(s => s.id === "s2").thinkingLevel, "high", "new chat must not reset to the binding's medium default");
   t.mock.method(api, "getSession", async id => ({ session: {
     ...useAppStore.getState().sessions.find(session => session.id === id), messages: [],
   } }));
   useAppStore.setState({ runningSessions: {}, isRunning: false });
   await useAppStore.getState().selectSession("s1");
   assert.equal(useAppStore.getState().activeSessionId, "s1");
-  assert.equal(useAppStore.getState().sessions.find(s => s.id === "s1").modelId, "a", "opening old chat preserves its model");
+  assert.equal(useAppStore.getState().sessions.find(s => s.id === "s1").modelId, "b", "switching chats inherits the latest used model");
+  assert.equal(useAppStore.getState().sessions.find(s => s.id === "s1").thinkingLevel, "high");
   assert.equal(loadRecentModels()[0].modelId, "b", "opening old chat does not count as usage");
   t.mock.method(api, "prompt", async () => ({}));
+  await configure("a", "medium");
   assert.equal(await useAppStore.getState().sendPrompt("use a in the old chat"), true);
   assert.deepEqual(loadRecentModels().map(model => model.modelId), ["a", "b"]);
   useAppStore.setState({ activeSessionId: null, draftConfiguration: null });
   await materializeDraftSession();
   assert.equal(useAppStore.getState().sessions.find(s => s.id === "s3").modelId, "a");
+  assert.equal(useAppStore.getState().sessions.find(s => s.id === "s3").thinkingLevel, "medium");
   assert.equal(useAppStore.getState().sessions.find(s => s.id === "s2").modelId, "b", "other existing chats retain their binding");
 });

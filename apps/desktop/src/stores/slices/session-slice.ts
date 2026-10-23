@@ -59,6 +59,7 @@ import { switchWorkPanelSession } from "./work-panel-slice";
 
 export type SessionSliceDependencies = StoreAccess & {
   runtime: SessionRuntime;
+  applyRecentSessionModel: (sessionId: string) => void;
   decorateSessions: (
     sessions: SessionSummary[],
     meta: Record<string, SessionMeta>,
@@ -147,6 +148,7 @@ export function createSessionSlice({
   get,
   set,
   runtime,
+  applyRecentSessionModel,
   decorateSessions,
   withoutRecordKey,
   sessionModeForPlanningState,
@@ -173,7 +175,7 @@ export function createSessionSlice({
   const refreshSessionList = createRefreshCoordinator(async () => {
     const result = await api.listSessions();
     set((state) => {
-      const next = result.sessions.map(safeSessionSummary);
+      const next = result.sessions.map(safeSessionSummary).map(runtime.projectSessionConfiguration);
       const active = state.sessions.find((session) => session.id === state.activeSessionId);
       // A disconnected host may temporarily disappear from inventory; keep the
       // active identity fail-closed until an authoritative detail/list replaces it.
@@ -403,6 +405,7 @@ export function createSessionSlice({
           },
       ) => {
         const record = opts?.record !== false;
+        const activating = get().activeSessionId !== id;
         const commit = (state: AppState) => ({
           ...(state.activeSessionId === id ? {} : switchWorkPanelSession(state, id)),
           ...retainSessionPane(state, id, messages),
@@ -415,19 +418,20 @@ export function createSessionSlice({
         });
         if (!record) {
           set(commit);
-          return;
+        } else {
+          set((state) => {
+            const stack = state.navStack.slice(0, state.navIndex + 1);
+            const last = stack[stack.length - 1];
+            const same = last?.page === "chat" && last?.sessionId === id;
+            const nextStack = same ? stack : [...stack, { page: "chat" as const, sessionId: id }].slice(-50);
+            return {
+              ...commit(state),
+              navStack: nextStack,
+              navIndex: nextStack.length - 1,
+            };
+          });
         }
-        set((state) => {
-          const stack = state.navStack.slice(0, state.navIndex + 1);
-          const last = stack[stack.length - 1];
-          const same = last?.page === "chat" && last?.sessionId === id;
-          const nextStack = same ? stack : [...stack, { page: "chat" as const, sessionId: id }].slice(-50);
-          return {
-            ...commit(state),
-            navStack: nextStack,
-            navIndex: nextStack.length - 1,
-          };
-        });
+        if (activating) applyRecentSessionModel(id);
       };
 
       const alignWorkspace = async (session?: SessionSummary | null) => {
@@ -826,7 +830,7 @@ export function createSessionSlice({
         sessions: state.sessions.map((session) =>
           session.id === sessionId
             ? {
-                ...result.session,
+                ...runtime.projectSessionConfiguration(result.session),
                 pinned: sessionIsPinned(sessionId, state.sessionMeta),
                 archived: sessionIsArchived(sessionId, state.sessionMeta),
               }

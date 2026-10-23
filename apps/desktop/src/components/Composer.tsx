@@ -1,5 +1,5 @@
 import { isRemoteSession, sessionAllows } from "../lib/remote-session-safety";
-import { inheritedSessionModelBinding } from "../lib/session-model";
+import { inheritedSessionModelBinding, inheritedSessionThinkingLevel } from "../lib/session-model";
 import {
   useEffect,
   useLayoutEffect,
@@ -13,8 +13,6 @@ import type {
   PermissionMode,
 } from "@pi-desktop/shared";
 import {
-  initialThinkingLevelForBinding,
-  initialThinkingLevelForUnmatchedModel,
   imageGenerationBindings,
   isImageGenerationModel,
   normalizeLargePasteThreshold,
@@ -24,7 +22,7 @@ import { latestTurnContextInspector } from "../lib/latest-turn-context";
 import { isActivePlanExecution } from "../lib/plan-mode-state";
 import { headAsk, queuedAskCount } from "../lib/pending-asks";
 import type { QueuedPrompt } from "../lib/queued-prompts";
-import { composerModelDisplayName, sameComposerModelId } from "../lib/composer-models";
+import { composerModelDisplayName } from "../lib/composer-models";
 import {
   resolveComposerThinkingProvider,
 } from "../lib/session-thinking";
@@ -363,23 +361,9 @@ export function Composer({
     activeSession,
     catalogThinkingProvider,
   });
-  const selectedBinding = provider?.models.find((candidate) =>
-    sameComposerModelId(candidate.id, modelId ?? ""),
-  );
-  const selectedModelInfo = selectedModelCatalog?.find((candidate) =>
-    sameComposerModelId(candidate.modelId, modelId ?? ""),
-  );
-  // A draft without a session starts at the selected model's stored default
-  // thinking level, clamped onto that binding's enabled ladder.
-  const draftThinkingLevel = selectedModelInfo?.catalogSource === "models.dev"
-    ? initialThinkingLevelForBinding(
-        selectedBinding,
-        thinkingProvider?.supportedThinkingLevels,
-      )
-    : initialThinkingLevelForUnmatchedModel(
-        selectedBinding,
-        thinkingProvider?.supportedThinkingLevels,
-      );
+  const draftThinkingLevel = inheritedSessionThinkingLevel({
+    selection: selectedModel, providers, providerModels, recentModels,
+  });
   const sessionThinkingLevel =
     activeSession?.thinkingLevel ??
     (!activeSession ? draftConfiguration?.thinkingLevel : undefined) ??

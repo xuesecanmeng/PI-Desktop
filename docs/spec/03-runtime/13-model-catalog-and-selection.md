@@ -218,17 +218,22 @@ task. See runtime §5f and ADR subagent-model-fallback.
 
 ## 3. Recent models
 
-Persist recent selected model refs:
+Persist the most recently accepted chat submissions in renderer-local
+`localStorage` under `pi.desktop.recentModels`:
 
 ```ts
 type RecentModelRef = {
   providerId: string
   modelId: string
-  usedAt: string
+  thinkingLevel?: SessionThinkingLevel
 }
 ```
 
-Show top N in picker.
+The ordered list holds at most 20 provider/model pairs; the picker shows the
+first three available pairs. Accepted submission saves the model and thinking
+level together. Merely changing a control, opening a chat, or a rejected send
+does not update usage. Legacy pairs without `thinkingLevel` remain valid;
+invalid saved levels are discarded without dropping the pair.
 
 ## 4. Session model binding
 
@@ -249,15 +254,27 @@ execution time, except `omit`, which is preserved on a reasoning model and
 sends no thinking override. An empty binding or a binding containing only
 `off` resolves to `off`.
 
-For a newly created session or explicit model switch, the renderer resolves the
-selected (or app-default) model's `ModelBinding`. A catalog-matched reasoning
-model starts at that binding's `defaultThinkingLevel` (`omit` is preserved;
-other values are clamped onto the enabled levels); when the default is unset it
-falls back to the highest enabled level. An unmatched model starts at `off`
-unless its binding stores an explicit default, while its Composer ladder stays
-available for manual opt-in. Changing a default in Settings does not rewrite
-existing sessions; an existing session keeps its stored choice until a
-different model is explicitly selected.
+New chats and activated local Desktop chats inherit the latest actually used
+available provider/model and its saved thinking level. This changes next-turn
+session configuration through the normal configure/staging path; it never
+changes an in-flight runtime or rewrites background chats eagerly. Remote,
+native Pi, model-locked, and pending-approval sessions keep their configuration
+boundaries. A legacy recent pair without a thinking level preserves an existing
+same-model session's stored level.
+
+The renderer resolves the inherited level against the selected model's binding,
+preserving `omit` and clamping other values to enabled levels. Without a saved
+level, a catalog-matched reasoning model uses its binding's
+`defaultThinkingLevel`, or the highest enabled level when unset. An unmatched
+model starts at `off` unless its binding stores an explicit default, while its
+Composer ladder stays available for manual opt-in. Explicitly selecting a
+different model still applies that binding's default; selecting the same model
+preserves a manual level. Changing Settings alone does not rewrite sessions.
+
+While a next-turn configuration is pending, session/catalog refreshes and older
+configuration responses preserve the newest queued choice. Sending from an idle
+session waits for configuration persistence; a failed write blocks submission
+and preserves the draft and pending choice for retry.
 
 Unpinned sessions still advertise that inherited default model's reasoning
 capability on session list/get/create/fork/configure. Enrichment does not pin
@@ -605,8 +622,13 @@ same model to the check mark, the toggle and the duplicate guard.
       refresh keeps the cached picker populated
 - [ ] capability badges visible
 - [ ] session model change applies to next turn only
-- [ ] a newly created session stores the then-current default provider/model, and later default-model changes do not rewrite that session
-- [ ] a catalog-matched reasoning model defaults a new session to that
+- [ ] new and activated local chats inherit the latest accepted model and
+      thinking level, including after renderer preference reload; switching
+      alone does not count as usage or alter an in-flight turn
+- [ ] pending configuration survives stale list/catalog refreshes and older
+      writes; an immediate send waits for persistence and remains recoverable
+      if configuration fails
+- [ ] without a saved thinking preference, a catalog-matched reasoning model defaults a new session to that
       binding's stored thinking level (clamped onto the enabled set;
       strongest-enabled only when unset); an unmatched model starts at `off`
       without an explicit binding default while retaining the manual thinking

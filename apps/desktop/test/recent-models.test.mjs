@@ -10,6 +10,21 @@ const providers = [
 ];
 const settings = { defaultProviderId: "a", defaultModelId: "one", imageGenerationModels: [ref("a", "image")] };
 
+test("recent usage persists thinking alongside the exact provider/model pair", () => {
+  const old = globalThis.localStorage;
+  const data = new Map();
+  globalThis.localStorage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) };
+  try {
+    const selected = { ...ref("a", "one"), thinkingLevel: "high" };
+    saveRecentModels(rememberModelInList([], selected));
+    assert.deepEqual(loadRecentModels(), [selected]);
+    saveRecentModels([{ ...selected, thinkingLevel: "omit" }]);
+    assert.equal(loadRecentModels()[0].thinkingLevel, "omit");
+    saveRecentModels([ref("a", "one"), { ...ref("b", "one"), thinkingLevel: "invalid" }]);
+    assert.deepEqual(loadRecentModels(), [ref("a", "one"), ref("b", "one")], "legacy pairs survive and invalid thinking is ignored");
+  } finally { globalThis.localStorage = old; }
+});
+
 test("recent selection restores after reload and deduplicates exact provider/model pairs", () => {
   const old = globalThis.localStorage;
   const data = new Map();

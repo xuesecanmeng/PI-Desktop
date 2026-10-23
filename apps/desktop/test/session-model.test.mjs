@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   inheritedSessionModelBinding,
+  inheritedSessionThinkingLevel,
   lastUsedSessionModel,
   pinnedSessionModelBinding,
   sessionNeedsModelPin,
@@ -19,6 +20,20 @@ const providers = [
     models: [{ id: "claude-sonnet" }],
   },
 ];
+
+test("remembered thinking wins over a binding default and clamps to enabled levels", () => {
+  const provider = { id: "p", models: [{ id: "model", thinkingLevels: ["medium", "high"], defaultThinkingLevel: "medium" }] };
+  const options = { selection: { providerId: "p", modelId: "model" }, providers: [provider],
+    providerModels: { p: [{ modelId: "model", catalogSource: "models.dev" }] } };
+  assert.equal(inheritedSessionThinkingLevel(options), "medium");
+  assert.equal(inheritedSessionThinkingLevel({ ...options, recentModels: [{ providerId: "p", modelId: "MODEL", thinkingLevel: "high" }] }), "high");
+  assert.equal(inheritedSessionThinkingLevel({ ...options, recentModels: [{ providerId: "p", modelId: "model", thinkingLevel: "max" }] }), "high");
+  assert.equal(inheritedSessionThinkingLevel({ ...options, recentModels: [{ providerId: "other", modelId: "model", thinkingLevel: "high" }] }), "medium");
+  assert.equal(inheritedSessionThinkingLevel({ ...options, recentModels: [{ providerId: "p", modelId: "model", thinkingLevel: "high" }], thinkingLevel: "medium" }), "medium");
+  assert.equal(inheritedSessionThinkingLevel({ ...options, providerModels: {}, recentModels: [{ providerId: "p", modelId: "model", thinkingLevel: "omit" }] }), "omit");
+  assert.equal(inheritedSessionThinkingLevel({ ...options, providerModels: {}, providers: [{ ...provider, models: [{ id: "model", thinkingLevels: [] }] }], recentModels: [{ providerId: "p", modelId: "model", thinkingLevel: "max" }] }), "max");
+  assert.equal(inheritedSessionThinkingLevel({ ...options, providers: [{ ...provider, models: [{ id: "model", thinkingLevels: ["off"] }] }], recentModels: [{ providerId: "p", modelId: "model", thinkingLevel: "high" }] }), "off");
+});
 
 test("new sessions snapshot the app default provider and model", () => {
   assert.deepEqual(

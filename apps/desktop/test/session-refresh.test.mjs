@@ -9,6 +9,7 @@ const { createRefreshCoordinator } = await import(
 const { createSessionSlice } = await import(
   "../src/stores/slices/session-slice.ts"
 );
+const { createSessionRuntime } = await import("../src/stores/runtime/session-runtime.ts");
 const { api } = await import("../src/lib/api.ts");
 
 function deferred() {
@@ -140,13 +141,17 @@ function sessionHarness(t, initialSessions) {
     restoreProjects: (paths) => restoredPaths.push(paths),
   };
   t.mock.method(api, "listSessions", () => host.read());
-  const slice = createSessionSlice({
+  const access = {
     get: () => state,
     set: (update) => {
       const patch = typeof update === "function" ? update(state) : update;
       commits.push(patch);
       state = { ...state, ...patch };
     },
+  };
+  const slice = createSessionSlice({
+    ...access,
+    runtime: createSessionRuntime(access),
     decorateSessions: (sessions, meta) =>
       sessions.map((entry) => ({
         ...entry,

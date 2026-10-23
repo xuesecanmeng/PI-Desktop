@@ -1,5 +1,12 @@
-/** Resolve the provider/model a session should keep after first selection. */
+/** Resolve configured and inherited next-turn model preferences. */
 import type { RecentModel } from "./recent-models";
+import {
+  initialThinkingLevelForBinding,
+  initialThinkingLevelForUnmatchedModel,
+  type ModelInfo,
+  type ProviderPublic,
+  type SessionThinkingLevel,
+} from "@pi-desktop/shared";
 
 export type SessionModelRef = {
   providerId?: string;
@@ -44,7 +51,7 @@ export function availableRecentModels(
 
 /**
  * Snapshot the most recent available binding when a chat is created.
- * Explicit drafts and existing session bindings keep their own selection.
+ * Explicit draft/session fields take priority; activation applies usage separately.
  */
 export function inheritedSessionModelBinding({
   draft,
@@ -82,6 +89,32 @@ export function inheritedSessionModelBinding({
     ...(providerId ? { providerId } : {}),
     ...(modelId ? { modelId } : {}),
   };
+}
+
+/** Resolve one next-turn level for home, creation and session activation. */
+export function inheritedSessionThinkingLevel({
+  selection, providers, providerModels, recentModels = [], thinkingLevel,
+}: {
+  selection: SessionModelRef;
+  providers: readonly ProviderPublic[];
+  providerModels: Readonly<Record<string, readonly ModelInfo[] | undefined>>;
+  recentModels?: readonly RecentModel[];
+  thinkingLevel?: SessionThinkingLevel;
+}): SessionThinkingLevel {
+  const provider = providers.find((candidate) => candidate.id === selection.providerId);
+  const modelId = selection.modelId?.toLowerCase();
+  const binding = provider?.models.find((candidate) => candidate.id.toLowerCase() === modelId);
+  const catalogModel = selection.providerId
+    ? providerModels[selection.providerId]?.find((candidate) => candidate.modelId.toLowerCase() === modelId)
+    : undefined;
+  const recent = recentModels.find((candidate) =>
+    candidate.providerId === selection.providerId && candidate.modelId.toLowerCase() === modelId,
+  );
+  const requested = thinkingLevel ?? recent?.thinkingLevel;
+  const configured = requested === undefined ? binding : { ...binding, defaultThinkingLevel: requested };
+  return catalogModel?.catalogSource === "models.dev"
+    ? initialThinkingLevelForBinding(configured, provider?.supportedThinkingLevels)
+    : initialThinkingLevelForUnmatchedModel(configured, provider?.supportedThinkingLevels);
 }
 
 /** Newest transcript turn that already recorded a provider/model. */

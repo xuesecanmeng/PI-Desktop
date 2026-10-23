@@ -18296,13 +18296,25 @@ host-created files. The full app's file-preview viewer is covered separately.
   arrow navigation: no stale keyboard highlight remains on a model row.
   Without history, all configured models are directly visible. Verify thinking
   defaults still follow the selected binding and manual same-model levels survive.
-- Create a new chat: it inherits the last actually used model. Reload local preferences
-  and create another chat: the same binding is restored. An existing chat keeps
-  its own binding, including when opened after a different model was used.
+- Use a model with a Medium binding default at High, then create a new chat:
+  it inherits that model and High. Reload local preferences and create another
+  chat: the same combination is restored. Open an existing configurable local
+  chat after using a different model: its next turn inherits the latest used
+  model and thinking level. A background chat retains its binding until opened.
   Opening an old chat or changing a model or reasoning alone does not alter history.
   Send in an older chat: accepted submission updates new-chat inheritance;
   rejected submission does not. Deferred configuration alone does not count
   as usage.
+- Switch chats and immediately send while configuration persistence is pending:
+  submission waits for the latest choice. Change the choice during that write,
+  refresh sessions/providers with older durable values, and switch away:
+  neither refresh nor the older write resets the queued level, and the original
+  chat submits with the final choice. Failed configuration blocks submission,
+  preserves the draft and pending choice, and succeeds after a retry.
+- A running chat stages the inherited combination until its current turn ends.
+  Remote/native Pi, model-locked, and pending-approval chats are not reconfigured.
+  Legacy recent pairs remain readable; invalid saved thinking values are ignored,
+  and a legacy same-model pair does not reset an existing manual override.
 
 - **Preconditions:** Isolated Electron profile, fake Host IPC/secret storage,
   and a `globalThis.fetch` fixture for `https://api.typesafe.ai/v1/systemone`.
@@ -18352,6 +18364,7 @@ host-created files. The full app's file-preview viewer is covered separately.
 - Settings contains no fixed chat-default picker or Make default service action;
   image model selection and provider configuration remain available.
 - Coverage: recent-models.test.mjs, recent-model-flow.test.mjs,
+  recent-session-configuration.test.mjs, session-model.test.mjs,
   default-model-picker.test.mjs, and scripts/e2e-composer-model-selection.mjs.
 
 

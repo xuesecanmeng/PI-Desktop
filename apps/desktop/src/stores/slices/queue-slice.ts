@@ -51,6 +51,7 @@ export type QueueSliceDependencies = StoreAccess & {
   messageErrorFromUnknown: (error: unknown) => AppError;
   assistantErrorMessage: (error: AppError) => UiMessage;
   materializeDraftSession: (intent?: number) => Promise<string | null>;
+  flushPendingSessionConfiguration: (sessionId: string) => Promise<void>;
 };
 
 export function createQueueSlice({
@@ -63,6 +64,7 @@ export function createQueueSlice({
   messageErrorFromUnknown,
   assistantErrorMessage,
   materializeDraftSession,
+  flushPendingSessionConfiguration,
 }: QueueSliceDependencies): Pick<
   AppState,
   | "enqueuePrompt"
@@ -381,6 +383,12 @@ export function createQueueSlice({
           materializedKey = key;
         }
         if (!sessionId) throw new Error(i18n.t("errors.noActiveSession"));
+        if (!get().runningSessions[sessionId] && (
+          runtime.pendingSessionConfigurations.has(sessionId) || runtime.sessionConfigurationFlushes.has(sessionId)
+        )) {
+          await flushPendingSessionConfiguration(sessionId);
+          if (runtime.pendingSessionConfigurations.has(sessionId)) return false;
+        }
         if (get().pendingPlans[sessionId]?.status === "pending") return false;
         if (get().runningSessions[sessionId]) {
           // Native Pi children have no Desktop prompt queue. Reject the send

@@ -65,7 +65,7 @@ export function createCatalogSlice({
       set((state) => ({
         providers: providers.providers,
         providerModels: {},
-        sessions: decorateSessions(sessions.sessions, state.sessionMeta),
+        sessions: decorateSessions(sessions.sessions.map(sessionRuntime.projectSessionConfiguration), state.sessionMeta),
         settings,
         onboarding,
       }));

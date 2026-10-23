@@ -3071,7 +3071,7 @@ reasoning-level control.
 | Idle (no model) | textarea active, send button disabled + tooltip "Configure a model first" | Agent link remains available in model menu |
 | Idle (ready) | textarea active; Send requires draft content | Send active when content exists |
 | Home/new-session initialization | textarea and mode/model × reasoning/permission triggers remain available while the durable empty session is loading; the session row is already present and the first configuration selection applies to that session | Configure the session, then send |
-| New session (reasoning model) | Combined model × reasoning chip shows the model and its binding default thinking level; an unmatched model starts at Off while keeping the manual ladder available | User may select any level enabled in the model binding, or any canonical level for an unmatched model |
+| New session (reasoning model) | Combined model × reasoning chip inherits the latest used model and thinking level; without a saved level it uses the binding default, or Off for an unmatched model without a default | User may select any level enabled in the model binding, or any canonical level for an unmatched model |
 | New session / switch while another session is running | textarea active, send button enabled for the destination session's own run state | Send active, Stop hidden unless the destination session itself is running with an empty draft |
 | Running | textarea and mode/model × reasoning/permission controls remain editable for the next turn; the single submit slot shows Stop only with an empty draft | Send queues text or attachments; Stop when both are empty |
 | Context checkpoint | Same as Running until durable checkpoint completion; intermediate `turn_end` does not reactivate controls. A retained-tail fallback remains Running and shows a warning toast | Same single-slot Stop/Send behavior as Running |
@@ -3225,15 +3225,21 @@ reasoning-level control.
   model therefore updates the draft Composer's available levels and binding
   default thinking level immediately; the persisted session keeps the same
   exact-model capability after materialization.
-- A new session whose inherited catalog-matched model supports reasoning starts
-  with Thinking enabled at that model's stored default thinking level, clamped
+- New and activated configurable local chats inherit the latest actually used
+  available model and thinking level together, including after preference
+  reload. The inherited level is clamped onto the model's enabled set, with
+  `omit` preserved. A legacy recent pair without a level preserves an existing
+  same-model chat's override. Running turns keep their original configuration;
+  the inherited choice applies to the next turn. Remote/native Pi and
+  pending-approval sessions retain their configuration boundaries.
+- Without a saved level, a new session whose inherited catalog-matched model
+  supports reasoning starts at that model's stored default thinking level, clamped
   onto the enabled set. When the binding has no default, it falls back to the
   highest enabled level. An unmatched model starts at `off` unless its binding
   stores an explicit default, while the Composer keeps the canonical ladder
   available for manual opt-in. Published levels seed a new binding; an
-  explicit binding can opt into a level the catalog omits. Reopening an
-  existing session preserves its durable selection; explicitly switching to a
-  different model applies that binding's default, while selecting the
+  explicit binding can opt into a level the catalog omits. Explicitly switching
+  to a different model applies that binding's default, while selecting the
   already-active model preserves a manually chosen level.
 - The model menu lists only enabled, runnable providers with configured model
   bindings. Cached or freshly discovered rows may enrich those configured
@@ -4067,10 +4073,13 @@ default nor provider configuration. OAuth accounts remain in their separate sect
 1. **Model selection** — chat models are selected in the Composer. Its first
    menu has persistent search, up to three recent available provider/model pairs,
    and an inline Other models disclosure. Without history, it shows all models.
-   New chats inherit the last actually used available model. Only accepted
+   New and activated configurable local chats inherit the last actually used
+   available model and thinking level. Only accepted
    message submission updates that preference; selection and reasoning changes
    alone do not count as usage.
-   Existing chats keep their own binding. The fixed chat-default
+   Background chats retain their binding until activated. Pending next-turn
+   choices survive refreshes; an idle send waits for configuration persistence,
+   and a failed write preserves the draft for retry. The fixed chat-default
    picker and service Make default action are absent. The independent image
    model row remains when image-generation candidates are configured.
 2. **Vendor accounts** — account labels, configured models, Test connection,

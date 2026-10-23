@@ -136,9 +136,6 @@ const sessionCoordination: SessionCoordination = createSessionCoordination({
 });
 const {
   flushPendingSessionConfiguration,
-  rememberSessionCompactions,
-  commitForkedSession,
-  persistSessionAndSelect,
   materializeDraftSession: materializeDraftSessionInternal,
 } = sessionCoordination;
 
@@ -168,9 +165,7 @@ export const useAppStore = create<AppState>((set, get) => {
     withoutRecordKey,
     sessionModeForPlanningState,
     openPlanArtifact,
-    rememberSessionCompactions,
-    commitForkedSession,
-    persistSessionAndSelect,
+    ...sessionCoordination,
   }),
 
   ...createQueueSlice({
@@ -183,6 +178,7 @@ export const useAppStore = create<AppState>((set, get) => {
     messageErrorFromUnknown,
     assistantErrorMessage,
     materializeDraftSession: materializeDraftSessionInternal,
+    flushPendingSessionConfiguration,
   }),
 
   ...createTranscriptSlice({
