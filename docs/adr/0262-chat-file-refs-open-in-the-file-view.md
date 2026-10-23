@@ -34,11 +34,15 @@ native menu actions, and directory resolution/browsing. It supersedes the
 automatic HTML browser destination: HTML now follows ordinary file opening,
 while its Open with submenu retains explicit browser choices.
 
+The [local user-file amendment](user-local-file-access.md) additionally admits
+exact paths outside project/store roots for local desktop actions. Those files
+use the host viewer. Shorthand search and remote/plugin containment stay scoped.
+
 1. **Completion runs in Electron main**, as `fs.resolveRef`, because only main
    sees both the open project and the session's own scratch store
    (`<data_dir>/scratch/<sessionId>/`, ADR 0124). The order is a product
    contract, not an implementation detail:
-   - an absolute reference that already names a real file inside a known root
+   - an absolute reference that already names a real local file
      wins outright — that is path equality, not a guess;
    - an `attachments/<sha256>` blob names a stored file by hash, so it resolves
      against the attachment store directly;
@@ -61,13 +65,13 @@ while its Open with submenu retains explicit browser choices.
    be brought into view. The bundled view accepts opaque path locations and has
    no line-navigation contract; this keeps the path unchanged and uses the
    host viewer's existing scroll support. A file in the session scratch or
-   attachment store opens in the
+   attachment store, or an external local file, opens in the
    host `file:` tab, because it lives outside that view's project root — see
    point 4. HTML follows the same file-opening preference and source viewer
    rules. Its Open with submenu can explicitly select File Manager, built-in
    browser, or default browser for one click. Main resolves browser roots from
    the owning session, never a different visible project's root. The resolved
-   absolute path is carried through navigation, and containment still applies.
+   absolute path is carried through navigation under the local user-file policy.
    Positioned HTML references retain the source viewer. A disabled browser
    reports an error instead of silently dropping a click or enabling itself.
    A direct user click on a project file actively ensures

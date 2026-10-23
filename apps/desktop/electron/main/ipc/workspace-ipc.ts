@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { existsSync, statSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { isAbsolute, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   ErrorCodes,
   IPC,
@@ -34,17 +34,19 @@ import { collectWorkspaceDiff } from "@pi-desktop/host-runtime";
 import { parseAllowedExternalUrl } from "../safe-open-external";
 import {
   isAttachmentBlobRef,
-  listDir,
+  listUserDirectory,
   readOpenableFile,
   readOpenableImage,
+  readUserFile,
+  readUserImage,
   resolveRealOpenablePath,
+  resolveUserFilePath,
+  resolveUserChatFileRef,
 } from "@pi-desktop/host-runtime";
 import { openableMp4Path } from "../open-attachment-video";
-import { isChatRefOutsideRoots, resolveChatFileRef } from "../chat-ref-resolve";
 import { rebaseWorktreeRef, type WorktreeRefContext } from "../worktree-ref";
 import { getWorkspaceFileIndex, searchWorkspaceFiles } from "../fs-index";
 import {
-  projectFolderPaths,
   refreshProjectGroups,
   rememberProjectGroups,
   workspaceRootsFor,
@@ -826,54 +828,9 @@ export function registerWorkspaceIpc({
     const requested = String(input.path ?? "");
     const remote = await remoteFileWorkspace(input.sessionId);
     if (remote && !(await isLocalStoredFile(requested))) return readRemoteFiles(remote, "list", input.path);
-    if (isAbsolute(requested)) {
-      const root = await optionalWorkspaceRoot(input.sessionId);
-      const target = await resolveRealOpenablePath(requested, root, await fsExtraRoots(root));
-      if (!target) {
-        throw Object.assign(new Error("path outside allowed roots"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
-      }
-      return { entries: await listDir(target, "") };
-    }
-    const root = await requireWorkspaceRoot(input.sessionId);
-    return { entries: await listDir(root, requested) };
+    const root = await optionalWorkspaceRoot(input.sessionId);
+    return { entries: await listUserDirectory(requested, root, join(dataDir, "attachments")) };
   });
-
-  /**
-   * Roots the host file tab may read besides the workspace: the session stores,
-   * plus every *other* folder of the project group. ADR 0249 §5 makes a
-   * registered group root a valid containment base, so a chat reference that
-   * resolves in a sibling folder still opens instead of failing containment —
-   * which is what a user without the file view would otherwise see.
-   *
-   * Both the spelling of the root and its `realpath` are returned: a producer
-   * that canonicalizes what it records (image generation realpaths its output
-   * directory) would otherwise write a path that no listed root contains when
-   * `dataDir` or a project folder sits behind a link (`/var` on macOS, a linked
-   * or synced folder). The two entries name the same directory, and every
-   * candidate is still re-checked through `realpath` before a read is allowed.
-   */
-  const fsExtraRoots = async (workspaceRoot: string | null): Promise<string[]> => {
-    const roots = [
-      join(dataDir, "scratch"),
-      join(dataDir, "attachments"),
-      ...projectFolderPaths(workspaceRoot).filter((path) => path !== workspaceRoot),
-    ];
-    const canonical = await Promise.all(
-      roots.map(async (root) => {
-        try {
-          return await realpath(root);
-        } catch {
-          return null;
-        }
-      }),
-    );
-    return [
-      ...new Set([
-        ...roots,
-        ...canonical.filter((root): root is string => typeof root === "string"),
-      ]),
-    ];
-  };
 
   /**
    * The session's own scratch directory (ADR 0124), or null when the session
@@ -929,18 +886,11 @@ export function registerWorkspaceIpc({
       if (remote) {
         return readRemoteFiles(remote, "read", requested, input.mimeType);
       }
-      let workspaceRoot: string | null = null;
-      try {
-        workspaceRoot = await requireWorkspaceRoot(input.sessionId);
-      } catch (error) {
-        if (!isAbsolute(requested) && !isAttachmentBlobRef(requested)) {
-          throw error;
-        }
-      }
-      return readOpenableFile(
+      const workspaceRoot = await optionalWorkspaceRoot(input.sessionId);
+      return readUserFile(
         requested,
         workspaceRoot,
-        await fsExtraRoots(workspaceRoot),
+        join(dataDir, "attachments"),
         input.mimeType,
       );
     },
@@ -957,10 +907,10 @@ export function registerWorkspaceIpc({
       }
       const workspaceRoot = await optionalWorkspaceRoot(input.sessionId);
       const requested = String(input.ref ?? "").trim();
-      return readOpenableImage(
+      return readUserImage(
         requested,
         workspaceRoot,
-        await fsExtraRoots(workspaceRoot),
+        join(dataDir, "attachments"),
         input.mimeType,
       );
     },
@@ -973,16 +923,17 @@ export function registerWorkspaceIpc({
     }
     const workspaceRoot = await optionalWorkspaceRoot(input.sessionId);
     const requested = String(input.path ?? "").trim();
-    const target = await resolveRealOpenablePath(
+    const requestedPath = resolveUserFilePath(
       requested,
       workspaceRoot,
-      await fsExtraRoots(workspaceRoot),
+      join(dataDir, "attachments"),
     );
-    if (!target) {
+    if (!requestedPath) {
       throw Object.assign(new Error("path is not openable"), {
         errorCode: ErrorCodes.INVALID_ARGUMENT,
       });
     }
+    const target = await realpath(requestedPath);
     const info = await stat(target);
     if (!info.isFile() && !info.isDirectory()) {
       throw Object.assign(new Error("not a file or directory"), {
@@ -1044,9 +995,9 @@ export function registerWorkspaceIpc({
    * Resolve a file reference from chat to a real file (D320 follow-up).
    * The renderer knows the workspace but not where a session keeps its scratch
    * files, and completion needs a filesystem walk, so every root is resolved
-   * here. Root order is the product contract inside `resolveChatFileRef`: the
+   * here. Known-root shorthand priority remains the product contract: the
    * whole project first — its group's folders, primary first — session scratch
-   * second, attachments last.
+   * second, attachments last. Explicit local user paths may also name any file.
    */
   handle(
     IPC.invoke.fsResolveRef,
@@ -1082,16 +1033,11 @@ export function registerWorkspaceIpc({
       const roots = {
         project: projectRootsFor(workspaceRoot),
         scratch: await sessionScratchRoot(input.sessionId),
-        // The read guards accept the whole scratch store, so an absolute image
-        // path from an earlier conversation completes instead of reporting a
-        // restriction; shorthands still search the session's own store alone.
+        // Known stores retain their classification and shorthand priority.
         containment: [{ kind: "scratch" as const, path: join(dataDir, "scratch") }],
         attachments: join(dataDir, "attachments"),
       };
-      if (await isChatRefOutsideRoots(ref, roots)) {
-        return { match: null, reason: "outside-allowed-roots" };
-      }
-      return { match: await resolveChatFileRef(ref, roots, { allowDirectories: input.allowDirectories === true }) };
+      return { match: await resolveUserChatFileRef(ref, roots, { allowDirectories: input.allowDirectories === true }) };
     },
   );
 

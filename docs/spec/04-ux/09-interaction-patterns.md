@@ -1403,7 +1403,9 @@ Project drag/drop follows these patterns:
   searches the whole open project — its group's folders, primary first
   (ADR 0263) — and then opens where it resolved: a project file in the bundled
   `pi.file-manager` work-panel view (the host `file:` tab when that view is not
-  available), a session-scratch or attachment file in the host `file:` tab.
+  available), a session-scratch, attachment or external local file in the host
+  `file:` tab. Explicit local paths need no project/store allowlist or additional
+  confirmation; preview reads and directory browsing follow the same policy.
   HTML follows those same file destinations instead of automatically opening
   the side browser. Settings → AI → Defaults selects Built-in viewer or System
   default application for every file (including HTML) and directory with one
@@ -1414,7 +1416,7 @@ Project drag/drop follows these patterns:
   Files tab or opening it in the system file manager. The in-app directory
   tree expands children and applies the same preferences to child file clicks.
   Plain directory names are not automatically linked. An explicit HTML browser
-  choice uses the resolved absolute path after reference resolution checks its roots.
+  choice uses the resolved absolute path after reference resolution checks the file.
   No project is required to open a scratch artifact. Missing workspace state
   is normalized consistently across asynchronous session-change guards.
   Local `file:` Markdown URLs are converted to file references before
@@ -1438,7 +1440,7 @@ Project drag/drop follows these patterns:
   offer **Open in VS Code** and **Open in File Explorer**. The latter selects a
   file or opens a directory's contents. Each action completes the reference
   first and uses that exact path; missing paths open nothing. VS Code uses a
-  Main-constructed fixed file URI after containment checks. Remote workspace
+  Main-constructed fixed file URI after file/directory validation. Remote workspace
   references keep copy actions without local application actions. A file
   outside the project has no relative path to copy and reports that fact.
 - In the host `file:` tab, a conversation MP4 that cannot be previewed because

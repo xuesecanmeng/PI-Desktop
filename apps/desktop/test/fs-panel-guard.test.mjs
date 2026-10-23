@@ -51,7 +51,7 @@ test("default ignore list hides vcs and dependency directories", () => {
   assert.equal(isIgnoredName("gitignore"), false);
 });
 
-test("work panel never follows a workspace link outside the real root", async (t) => {
+test("scoped workspace access never follows a link outside the real root", async (t) => {
   const fixture = await mkdtemp(join(tmpdir(), "pi-fs-panel-"));
   t.after(() => rm(fixture, { recursive: true, force: true }));
   const root = join(fixture, "workspace");

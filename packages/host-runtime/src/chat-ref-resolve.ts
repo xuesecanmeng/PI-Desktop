@@ -8,6 +8,7 @@ import type {
 } from "@pi-desktop/shared";
 import { isAttachmentBlobRef, isIgnoredName, resolveRealPathWithinRoot } from "./workspace-files.js";
 import { getWorkspaceFileIndex } from "./fs-index.js";
+import { resolveUserFilePath } from "./user-files.js";
 
 /**
  * Partial-path completion for a file reference the agent printed in chat.
@@ -472,4 +473,27 @@ export async function resolveChatFileRef(
   }
 
   return null;
+}
+
+/** Desktop user links may name any local file; scoped callers keep the resolver above. */
+export async function resolveUserChatFileRef(
+  ref: string,
+  roots: ChatRefRoots,
+  { allowDirectories = false }: { allowDirectories?: boolean } = {},
+): Promise<FsChatRefMatch | null> {
+  const known = await resolveChatFileRef(ref, roots, { allowDirectories });
+  if (known) return known;
+  const cleaned = cleanRef(ref);
+  const workspace = roots.project?.find((root) => root.primary)?.path ?? roots.project?.[0]?.path;
+  const path = resolveUserFilePath(cleaned, workspace, roots.attachments);
+  if (!path) return null;
+  const kind = await exactPathKind(path, allowDirectories);
+  if (!kind) return null;
+  return {
+    root: "external",
+    relativePath: "",
+    absolutePath: path,
+    matchedBy: isAbsolute(cleaned) || /^(?:file:|~[/\\])/i.test(cleaned) ? "exact-absolute" : "exact-relative",
+    ...(kind === "directory" ? { isDirectory: true as const } : {}),
+  };
 }

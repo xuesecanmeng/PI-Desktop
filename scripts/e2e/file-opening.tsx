@@ -20,6 +20,8 @@ const specialFile = `${directory}/note # 100%.txt`;
 const htmlFolder = `${directory}/folder.html`;
 const htmlFolderAlias = `${directory}/alias.HTML`;
 const missingHtml = `${directory}/missing.html`;
+const outside = config.outside.replaceAll("\\", "/");
+const externalFile = `${outside}/交接 # 100%.md`;
 await i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
@@ -40,7 +42,6 @@ useAppStore.setState({
 
 function Harness() {
   const settings = useAppStore((state) => state.settings);
-  const request = useAppStore((state) => state.workPanelFileRequest);
   const activeTab = useAppStore((state) => state.workPanelTabs.find((tab) => tab.id === state.activeWorkPanelTabId));
   return (
     <>
@@ -49,8 +50,8 @@ function Harness() {
         await api.setSettings(next);
         useAppStore.setState({ settings: next });
       }} />
-      <Markdown source={`[Open file](<${file}>)\n\n[Open HTML](<${page}>)\n\n[Open directory](<${directory}>)\n\n[Open special file](<${specialFile}>)\n\n[HTML-named directory](<${htmlFolder}>)\n\n[HTML-named directory alias](<${htmlFolderAlias}>)\n\n[Missing HTML](<${missingHtml}>)`} />
-      {activeTab?.kind === "file" && request?.isDirectory && <FilesTab />}
+      <Markdown source={`[Open file](<${file}>)\n\n[Open HTML](<${page}>)\n\n[Open directory](<${directory}>)\n\n[Open special file](<${specialFile}>)\n\n[HTML-named directory](<${htmlFolder}>)\n\n[HTML-named directory alias](<${htmlFolderAlias}>)\n\n[Missing HTML](<${missingHtml}>)\n\n[Open outside file](<${externalFile}>)\n\n[Open outside directory](<${outside}>)`} />
+      {activeTab?.kind === "file" && <FilesTab />}
     </>
   );
 }
@@ -244,8 +245,8 @@ Object.assign(window, {
     await until(async () => (await handoffs()).length === 4, "Explorer did not open the directory contents");
     check((await handoffs())[3].replaceAll("\\", "/") === directory, "Explorer opened a different directory");
 
-    // Invalid roots, missing paths and junction escapes never reach a native app.
-    const denied = await window.piDesktop.invoke("fixture/security");
+    // Missing paths and non-file URLs never reach a native app.
+    const denied = await window.piDesktop.invoke("fixture/invalidPaths");
     check(denied === true && (await handoffs()).length === 4, "an invalid path reached the OS");
     check((await nativeActions()).vscode.length === 3 && (await nativeActions()).revealed.length === 1, "an invalid path reached a native menu action");
 
@@ -270,7 +271,22 @@ Object.assign(window, {
     await until(async () => (await handoffs()).length === 6, "HTML submenu did not use the default application");
     check((await handoffs())[5].replaceAll("\\", "/") === branchPage, "HTML submenu opened a different branch file");
     check(useAppStore.getState().settings.fileOpenTarget === "workpanel", "HTML submenu changed the saved preference");
-    return { defaults: true, unifiedHtml: true, nativeMenu: true, htmlSubmenu: true, menuKinds: true, menuLifecycle: true, directoryBrowsing: true, persisted: true, systemOpening: true, containment: true, worktree: true };
+    clickLink("Open outside file");
+    await until(() => document.body.textContent?.includes("EXTERNAL_HANDOFF_FIXTURE"), "external Markdown was not read in the viewer");
+    check(useAppStore.getState().workPanelFileRequest?.path.replaceAll("\\", "/") === externalFile, "external reference selected a different file");
+    await selectMenu("Open outside file", "Open in VS Code");
+    await until(async () => pathFromVSCode((await nativeActions()).vscode.at(-1) ?? "") === externalFile, "external file did not reach VS Code");
+    await selectMenu("Open outside file", "Open in File Explorer");
+    await until(async () => (await nativeActions()).revealed.at(-1)?.replaceAll("\\", "/") === externalFile, "external file was not revealed");
+    choose("File and folder opening", "System default application");
+    await until(() => useAppStore.getState().settings.fileOpenTarget === "external", "external preference did not save");
+    clickLink("Open outside file");
+    await until(async () => (await handoffs()).at(-1)?.replaceAll("\\", "/") === externalFile, "external file was not handed to the system");
+    choose("File and folder opening", "Built-in viewer");
+    await until(() => useAppStore.getState().settings.fileOpenTarget === "workpanel", "built-in preference did not save");
+    clickLink("Open outside directory");
+    await until(() => document.querySelector('.file-tree button[title$="交接 # 100%.md"]'), "external directory could not be browsed");
+    return { defaults: true, unifiedHtml: true, nativeMenu: true, htmlSubmenu: true, menuKinds: true, menuLifecycle: true, directoryBrowsing: true, persisted: true, systemOpening: true, invalidPaths: true, worktree: true, externalFiles: true };
   },
 });
 await window.piDesktop.invoke("fixture/ready");

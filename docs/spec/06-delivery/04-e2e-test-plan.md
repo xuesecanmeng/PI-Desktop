@@ -18,8 +18,12 @@
   settings; expand a child directory and click its HTML file. Switch the single
   file/folder preference to system opening, reload it and reopen all three links.
   Right-click and select VS Code on HTML, a directory, and a filename containing
-  `#`, `%` and spaces. Select Explorer on a file and directory. Reject missing,
-  outside-root, URI-shaped and junction-escape paths at every native action.
+  `#`, `%` and spaces. Select Explorer on a file and directory. Reject missing
+  paths and unsupported URL inputs at every native action. Open an external
+  Markdown file containing Chinese, `#`, `%` and spaces; read its content, open
+  it in the system application, VS Code and Explorer, and browse its external
+  directory without an extra permission prompt. Follow a directory junction
+  outside the project.
   Isolate the session and reopen the parent-checkout directory reference. Use
   HTML's retained Open with submenu for all three destinations on the branch copy.
   Right-click an HTML-named directory, a directory junction with an HTML suffix
@@ -30,14 +34,16 @@
   browse in-app or open in the system file manager. HTML's submenu overrides one
   click without changing the preference. Native menu items resolve the same real
   file; Explorer selects files and opens directory contents. VS Code receives only
-  an encoded, fixed-scheme file URI. Restricted/missing paths open nothing, and
+  an encoded, fixed-scheme file URI. Missing paths open nothing, and
   worktree references open the branch copy. Only confirmed regular HTML files
   gain the special submenu; directory suffixes never select file actions. Late
   metadata preserves focus and cannot revive or modify a dismissed, replaced or
   stale-session menu. No real account or user data is used.
 - **Coverage:** `node --test test/file-opening-user-path.test.mjs` from
   `apps/desktop`; resolver, file-menu, settings-roundtrip, work-panel and worktree
-  suites cover branches. Shared protocol tests cover the new allowlisted channel;
+  suites cover branches. Host-runtime user-file tests cover external paths,
+  images, attachments and links while scoped reader/resolver and plugin tests
+  retain containment. Shared protocol tests cover the new allowlisted channel;
   configuration sync tests cover the unified portable preference. Actual external
   application windows are replaced at the OS launch boundary.
 - **Specs:** [Settings IA](../04-ux/06-settings-ia.md),

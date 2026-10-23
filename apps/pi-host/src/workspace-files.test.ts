@@ -20,6 +20,14 @@ describe("sessionless SSH file views", () => {
     expect(resolved).toMatchObject({ match: { relativePath: "src/main.ts", root: "workspace", absolutePath: join(await realpath(path), "src", "main.ts") } });
     expect(await files.read({ path, operation: "read", ref: "src/main.ts" })).toEqual({ kind: "text", content: "remote source", size: 13 });
   });
+  it("refuses explicit external files without falling back to local user access", async () => {
+    const path = await fixture(); const outside = await fixture(); const files = createWorkspaceFiles();
+    const external = join(outside, "src", "main.ts");
+    await expect(files.read({ path, operation: "read", ref: external })).rejects.toMatchObject({ code: "REMOTE_PATH_FORBIDDEN" });
+    await expect(files.read({ path, operation: "list", ref: outside })).rejects.toMatchObject({ code: "REMOTE_PATH_FORBIDDEN" });
+    expect(await files.read({ path, operation: "image", ref: external })).toEqual({ kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" });
+    expect(await files.read({ path, operation: "resolve", ref: external })).toEqual({ match: null, reason: "outside-allowed-roots" });
+  });
   it("does not fall back to this computer or cross symlink containment", async () => {
     const path = await fixture(); const outside = await fixture(); const files = createWorkspaceFiles();
     await symlink(join(outside, "src", "main.ts"), join(path, "escaped.ts"));

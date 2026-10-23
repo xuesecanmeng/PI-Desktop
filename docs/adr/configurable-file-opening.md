@@ -14,6 +14,9 @@ resolver could not complete them even if they reached Main.
 
 ## Decision
 
+The [local user-file amendment](user-local-file-access.md) removes project/store
+containment for local desktop user actions. Remote and plugin scopes stay separate.
+
 - Settings → AI → Defaults has one `fileOpenTarget` preference for files,
   including HTML, and directories: `workpanel` or `external`. Missing or unknown
   stored values keep built-in viewing; invalid writes are rejected in renderer
@@ -21,7 +24,7 @@ resolver could not complete them even if they reached Main.
   carry this optional field without a database migration. The candidate's former
   `htmlOpenTarget` field is ignored. HTTP(S) links retain their own preference.
 - Transcript entry points share the resolved-file opener. Built-in viewing uses
-  project File Manager (including HTML source), scratch/attachment host viewer,
+  project File Manager (including HTML source), scratch/attachment/external host viewer,
   and source-line navigation. HTML no longer automatically opens the browser.
   Its existing Open with submenu still offers File Manager, built-in browser
   and default browser as single-click overrides. System opening uses `fs/open`;
@@ -37,7 +40,7 @@ resolver could not complete them even if they reached Main.
   menu, alter a newer request or cross a session/project change, and enrichment
   preserves keyboard focus.
 - Add desktop-only `fs/openInVSCode({path, sessionId?})`. Main applies the same
-  canonical file/directory containment and remote-session gate as `fs/open` and
+  canonical file/directory validation and remote-session gate as `fs/open` and
   `fs/reveal`, then constructs a fixed `vscode://file` URI. Callers cannot supply
   an executable, scheme, URL, or arguments. URI encoding preserves Unicode and
   reserved filename characters. A directory URI ends in `/`. This follows the
@@ -45,7 +48,8 @@ resolver could not complete them even if they reached Main.
   The general external-URL allowlist remains unchanged.
 - `fs/reveal` selects a regular file in the system file manager; for a directory
   it opens its contents. Existing files and directories only; missing paths,
-  unsupported kinds, remote paths and realpath escapes are rejected.
+  unsupported kinds and remote paths are rejected. Local external paths and
+  links across project boundaries are accepted without extra confirmation.
 - Explicit Markdown links admit directory paths. Plain prose and automatic
   file recognition stay conservative. Windows paths and local file URLs become
   encoded path references before sanitization; they never become unrestricted
@@ -53,13 +57,13 @@ resolver could not complete them even if they reached Main.
 - `fs/resolveRef` adds optional `allowDirectories: boolean`, default false.
   Opted-in exact matches may return `isDirectory: true`; fuzzy matching and
   attachment hashes remain file-only. The owning session's worktree rebasing
-  also covers directories. All paths retain realpath containment.
+  also covers directories. Exact local user paths need no project containment.
 - Built-in directory browsing reuses the host Files tab and its directory tree.
   It expands child directories and routes file clicks through the same opener.
-  Absolute `fs/list` requests use the same canonical roots as file reads;
-  relative listing stays workspace-only. Ignore rules and child symlink
-  containment remain in place. No vendored File Manager changes are needed.
-- `fs/open` accepts contained files and directories through `shell.openPath`.
+  Absolute `fs/list` requests can name any local directory; relative paths use
+  the workspace as their base. Ignore rules remain, and valid child links may
+  cross project boundaries. No vendored File Manager changes are needed.
+- `fs/open` accepts local files and directories through `shell.openPath`.
   Attachment MP4 association and remote restrictions remain unchanged. The
   Plugin SDK's regular-file-only `fs.openDefault` contract is unchanged.
 
@@ -69,9 +73,9 @@ Users choose one destination for all files and folders. HTML browser preview
 remains available explicitly. A directory named `outputs.html` is still a
 directory: its resolved kind controls the action, and browser execution is
 refused. Directory tabs retain their own requests across session changes.
-Missing, restricted, stale-session and failed OS requests open nothing and
+Missing, stale-session and failed OS requests open nothing and
 remain observable. VS Code must be installed with its URI handler registered.
-No process ownership, permission grant or plugin sandbox boundary changes.
+No process ownership, persisted grant or plugin sandbox boundary changes.
 
 ## Alternatives
 

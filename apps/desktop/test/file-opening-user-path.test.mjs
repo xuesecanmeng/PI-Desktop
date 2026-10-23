@@ -66,7 +66,7 @@ shell.openPath = async (path) => { handoffs.push(path); return ""; };
 shell.openExternal = async (url) => { vscode.push(url); };
 shell.showItemInFolder = (path) => { revealed.push(path); };
 ipcMain.handle("fixture/invoke", async (_event, channel, ...args) => {
-  if (channel === "fixture/context") return { project, worktree };
+  if (channel === "fixture/context") return { project, worktree, outside };
   if (channel === "fixture/lookups") return lookups;
   if (channel === "fixture/holdLookup") {
     let release;
@@ -80,16 +80,16 @@ ipcMain.handle("fixture/invoke", async (_event, channel, ...args) => {
   if (channel === "fixture/handoffs") return handoffs;
   if (channel === "fixture/nativeActions") return { vscode, revealed };
   if (channel === "fixture/isolate") { isolated = true; return; }
-  if (channel === "fixture/security") {
-    for (const path of [outside, join(project, "escape"), join(project, "..", "outside"), join(project, "missing.txt"), "vscode://settings/editor.fontSize"]) {
+  if (channel === "fixture/invalidPaths") {
+    for (const path of [join(project, "missing.txt"), "vscode://settings/editor.fontSize"]) {
       for (const method of [IPC.invoke.fsOpen, IPC.invoke.fsList, IPC.invoke.fsReveal, IPC.invoke.fsOpenInVSCode]) {
         let refused = false;
         try { await handlers.get(method)({ path, sessionId: "fixture-session" }); } catch { refused = true; }
-        if (!refused) throw new Error("uncontained path was accepted: " + method);
+        if (!refused) throw new Error("invalid path was accepted: " + method);
       }
     }
     const lookup = await handlers.get(IPC.invoke.fsResolveRef)({ ref: join(project, "escape"), sessionId: "fixture-session", allowDirectories: true });
-    if (lookup.match) throw new Error("escaping directory reference matched");
+    if (lookup.match?.root !== "external" || !lookup.match.isDirectory) throw new Error("user-selected directory alias did not resolve");
     return true;
   }
   if (channel === IPC.invoke.pluginViews) return { ok: true, data: [
@@ -126,6 +126,7 @@ try {
   }
   await mkdir(dataDir, { recursive: true });
   await mkdir(outside, { recursive: true });
+  await writeFile(join(outside, "交接 # 100%.md"), "EXTERNAL_HANDOFF_FIXTURE");
   await symlink(outside, join(project, "escape"), process.platform === "win32" ? "junction" : "dir");
   await writeFile(settingsFile, JSON.stringify({ theme: "light", language: "en" }));
   const window = new BrowserWindow({ show: false, width: 1100, height: 850,
@@ -181,7 +182,7 @@ app.whenReady().then(() => import("./main.mjs")).catch((error) => { console.erro
     const line = output.split(/\r?\n/).find((value) => value.startsWith("FILE_OPENING_PROBE "));
     assert.ok(line, output.slice(-8000));
     const result = JSON.parse(line.slice("FILE_OPENING_PROBE ".length));
-    assert.deepEqual(result, { defaults: true, unifiedHtml: true, nativeMenu: true, htmlSubmenu: true, menuKinds: true, menuLifecycle: true, directoryBrowsing: true, persisted: true, systemOpening: true, containment: true, worktree: true });
+    assert.deepEqual(result, { defaults: true, unifiedHtml: true, nativeMenu: true, htmlSubmenu: true, menuKinds: true, menuLifecycle: true, directoryBrowsing: true, persisted: true, systemOpening: true, invalidPaths: true, worktree: true, externalFiles: true });
   } finally {
     assert.ok(temp.startsWith(join(root, "apps/desktop/.file-opening-ui-")));
     await rm(temp, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 });

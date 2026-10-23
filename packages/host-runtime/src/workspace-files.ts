@@ -3,10 +3,10 @@ import nodePath, { type PlatformPath, basename, dirname, isAbsolute, join, relat
 import type { FsEntry, FsImageDataUrlResult, FsReadResult } from "@pi-desktop/shared";
 
 /**
- * Read-only workspace file access for the work panel files tab
- * (ADR 0019). User-initiated UI browsing bypasses host-core tool
- * permissions on purpose, but stays inside the workspace root and honors
- * the default ignore subset of 15-workspace-ignore-rules.
+ * Scoped read-only workspace access and shared bounded previews. Local desktop
+ * user actions choose their access policy in user-files.ts; remote and tool
+ * callers retain the scoped helpers here. Listings honor the default ignore
+ * subset of 15-workspace-ignore-rules.
  */
 
 const IGNORED_NAMES = new Set([
@@ -73,7 +73,7 @@ function pathIsWithin(root: string, target: string): boolean {
 }
 
 /**
- * Resolve a user-clicked chat file path against the workspace plus extra
+ * Resolve a scoped file path against the workspace plus extra
  * containment roots (session scratch, attachments). Relative paths resolve
  * only inside the workspace; absolute paths must already live under one of
  * the allowed roots.
@@ -239,6 +239,19 @@ export function isIgnoredName(name: string): boolean {
 export async function listDir(root: string, rel: string): Promise<FsEntry[]> {
   const dir = await resolveRealPathWithinRoot(root, rel);
   if (!dir) throw new Error("path escapes workspace root");
+  return listDirectoryEntries(dir, (name) =>
+    resolveRealPathWithinRoot(root, rel ? `${rel}/${name}` : name));
+}
+
+/** User-selected local directories follow links without a workspace boundary. */
+export async function listLocalDirectory(dir: string): Promise<FsEntry[]> {
+  return listDirectoryEntries(dir, (name) => realpath(join(dir, name)));
+}
+
+async function listDirectoryEntries(
+  dir: string,
+  resolveLink: (name: string) => Promise<string | null>,
+): Promise<FsEntry[]> {
   const dirents = await readdir(dir, { withFileTypes: true });
   const entries: FsEntry[] = [];
   for (const dirent of dirents) {
@@ -255,13 +268,9 @@ export async function listDir(root: string, rel: string): Promise<FsEntry[]> {
         size = 0;
       }
     } else if (dirent.isSymbolicLink()) {
-      // Broken links and links whose real target leaves the workspace are
-      // omitted. The same real-path check runs again when opening the entry.
+      // The caller owns link scope; broken or disallowed links are omitted.
       try {
-        const target = await resolveRealPathWithinRoot(
-          root,
-          rel ? `${rel}/${dirent.name}` : dirent.name,
-        );
+        const target = await resolveLink(dirent.name);
         if (!target) continue;
         const info = await stat(target);
         kind = info.isDirectory() ? "dir" : "file";
@@ -305,7 +314,7 @@ export function imageMimeFor(displayPath: string, mimeType?: string): string | u
 }
 
 /**
- * Classify one already-contained regular file for in-app preview.
+ * Classify one regular file after the caller chooses its access policy.
  * Used by the host Files tab and by `pi.fs.readPreview` so the two
  * surfaces cannot drift on size caps or image detection.
  */
@@ -358,8 +367,7 @@ export async function readWorkspaceFile(
 
 /**
  * Read a workspace file, a content-addressed `attachments/<sha256>` blob, or
- * an absolute path already inside scratch/attachments. Containment matches
- * `fs/open` (D320) plus a realpath check.
+ * an absolute path already inside scratch/attachments, with realpath containment.
  */
 export async function readOpenableFile(
   path: string,
@@ -389,8 +397,17 @@ export async function readOpenableImage(
   if (!target) {
     return { kind: "missing", errorCode: "PATH_OUTSIDE_ALLOWED_ROOT" };
   }
+  return previewImage(target, path, mimeType);
+}
+
+/** Classify an image at a path whose access policy was chosen by its caller. */
+export async function previewImage(
+  target: string,
+  displayPath: string,
+  mimeType?: string,
+): Promise<FsImageDataUrlResult> {
   try {
-    const result = await previewFile(target, path, mimeType);
+    const result = await previewFile(target, displayPath, mimeType);
     if (result.kind === "image" && result.dataUrl) {
       return { kind: "image", dataUrl: result.dataUrl, size: result.size };
     }

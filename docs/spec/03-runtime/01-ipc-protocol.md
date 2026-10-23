@@ -1903,26 +1903,32 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
 
 ### fs (read-only)
 
-- `fs/list({path})` → entries sorted dirs-first; ignores `.git`,
+Local desktop user actions address any OS-accessible local file or directory
+without a project/store allowlist or extra approval. Absolute paths, local file
+URLs, home paths and paths relative to the workspace (including parent paths)
+are accepted. Remote Host operations and plugin/agent scopes retain their own
+containment; a remote workspace cannot fall back to arbitrary files on this
+computer. See [local user-file access](../../adr/user-local-file-access.md).
+
+- `fs/list({path, sessionId?})` → entries sorted dirs-first; ignores `.git`,
   `node_modules`, and the default ignore subset of
-  [15-workspace-ignore-rules](15-workspace-ignore-rules.md)
+  [15-workspace-ignore-rules](15-workspace-ignore-rules.md). Local directories
+  and valid child links may cross project boundaries. Empty paths list the
+  workspace root; absolute paths do not require a project.
 - `fs/read({path, mimeType?})` → text (≤512KB) / image data URL (≤5MB) /
-  binary / tooLarge. Relative paths resolve inside the workspace root;
-  `attachments/<sha256>` blobs and absolute paths already inside the
-  workspace, `<data_dir>/scratch/`, or `<data_dir>/attachments/` are also
-  accepted after a realpath check (D334 / ADR 0172), as is an absolute path in
-  another folder of the same project group (ADR 0249 §5, ADR 0263). A known
+  binary / tooLarge. Relative paths use the workspace as their base;
+  `attachments/<sha256>` blobs resolve against the attachment store. External
+  absolute files are readable without registering their directory. A known
   image extension wins over `mimeType`; extension-less blobs accept only the
-  image MIME allowlist. Traversal, `~`, and other escapes are rejected
-  (`INVALID_ARGUMENT`).
+  image MIME allowlist. Missing files and OS access errors remain observable.
 - `fs/readImageDataUrl({ref, mimeType?})` → `FsImageDataUrlResult`
   (`image` with `dataUrl`, or `missing` / `notImage` / `tooLarge`). Same
-  containment as `fs/read`. Never returns non-image bytes. Renderer-only;
+  local user-path policy as `fs/read`. Never returns non-image bytes. Renderer-only;
   not a plugin host API.
 - `fs/reveal({path, sessionId?})` selects a regular file in the system file
-  manager or opens a directory's contents. It shares `fs/open` containment,
+  manager or opens a directory's contents. It shares `fs/open` path resolution,
   existing-path validation and remote-session restrictions.
-- `fs/openInVSCode({path, sessionId?})` opens an existing contained local file or
+- `fs/openInVSCode({path, sessionId?})` opens an existing local file or
   directory in VS Code. After the same path/remote checks as `fs/open`, Main
   constructs a fixed `vscode://file` URI with an encoded path (trailing `/` for
   directories). Input cannot select a URL, scheme, executable or arguments.
@@ -1930,8 +1936,8 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   Launch failure is returned to the renderer; no alternate destination opens.
 - `fs/open({path, mimeType?, sessionId?})` → open an existing regular file with
   the OS default application, or a directory with the system file manager.
-  It uses the same realpath containment as `fs/read`,
-  including rejection of symlink escapes. For a content-addressed
+  It resolves the canonical existing file/directory without project containment.
+  For a content-addressed
   `attachments/<sha256>` blob declared as `video/mp4`, the host creates a
   `.mp4` symlink inside its private app-data directory before the OS handoff,
   so the extensionless blob has a media association without copying its bytes.
@@ -1939,11 +1945,10 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   (for isolated sessions, lookup and file reads use `worktree.location` rather
   than the parent project checkout; an absolute reference under the parent
   checkout is rebased onto the same relative path in the worktree when that
-  file or opted-in directory exists, so the branch copy opens instead of reporting
-  `outside-allowed-roots`)
+  file or opted-in directory exists, so the branch copy opens)
   (`{ match: FsChatRefMatch | null, reason?: "outside-allowed-roots" }`, the match naming the answering `root`
-  (`workspace` / `scratch` / `attachments`), the `relativePath` relative to that
-  root, optional `sessionScratch: true` for the current session's own scratch
+  (`workspace` / `scratch` / `attachments` / `external`), the `relativePath`
+  relative to that root (empty for `external`), optional `sessionScratch: true` for the current session's own scratch
   (not the wider read-only scratch containment store), the absolute
   `absolutePath`, `matchedBy` (`exact-relative` /
   `exact-absolute` / `path-suffix` / `basename`), and — for a `workspace` match
@@ -1951,8 +1956,8 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   that answered); `sessionId` selects the
   session whose scratch store is searched. Completes a file reference the agent
   printed in chat, because the renderer cannot see the session's own scratch
-  store: an absolute reference only matches that exact file inside a known
-  root, and an `attachments/<sha256>` blob resolves against the
+  store: an absolute reference only matches that exact local file, and an
+  `attachments/<sha256>` blob resolves against the
   attachment store directly; otherwise the roots are searched in priority order
   — the open project first, the session's own scratch store
   (`<data_dir>/scratch/<sessionId>/`, ADR 0124) second, the attachment store
@@ -1963,28 +1968,26 @@ Renderer IPC kept for the Plan-safe preview facade and URL fallback:
   and the match names the folder that answered. Inside one root an exact path
   beats a shorthand; a shorthand matches only when its complete supplied suffix
   identifies one safe file. It never degrades to a shorter suffix, and an
-  ambiguous match returns `match: null`. Relative and indexed candidates must
-  resolve to regular files whose real paths remain inside their answering root; an exact path through an
-  escaping or dangling link cannot fall back to a same-name indexed file. The
+  ambiguous match returns `match: null`. Indexed candidates must resolve to
+  regular files whose real paths remain inside their answering root. An exact
+  local path through a valid link outside a root may return `root: "external"`;
+  a dangling link cannot fall back to a same-name indexed file. The
   files-panel ignore set applies. An absolute reference may also name a store
   the app reads without searching it: the whole scratch store
   (`<data_dir>/scratch/`) holds every session's files — a generated image is
   clicked from whatever conversation is open — and the read guards (`fs/read`,
   `fs/open`, the image reader) already accept it, so such a path completes
   instead of reporting a restriction. A shorthand never completes from that
-  wider store; it still searches the session's own one. A reference that matches
-  nothing returns `match: null`; an absolute path outside every allowed root
-  also returns `reason: "outside-allowed-roots"`, without trying a same-name
-  file inside a root. `allowDirectories` defaults to false and must be a boolean
+  wider store; it still searches the session's own one. Exact local paths outside
+  known roots resolve as `external`, without searching their parent directory or
+  trying a same-name file inside a root. A reference that matches nothing returns
+  `match: null`. `reason: "outside-allowed-roots"` remains available for scoped
+  remote lookup; local user lookup does not return it. `allowDirectories`
+  defaults to false and must be a boolean
   when supplied. When true, exact relative or absolute paths may additionally
-  resolve to contained directories, marked `isDirectory: true`; fuzzy searches
+  resolve to local directories, marked `isDirectory: true`; fuzzy searches
   and attachment hashes remain file-only. Resolving never opens anything
   (ADR 0262 and [file-opening amendment](../../adr/configurable-file-opening.md)).
-- `fs/list({path, sessionId?})` keeps relative paths workspace-only. Absolute
-  directories may use the same roots and canonical containment as `fs/read`,
-  including session stores and registered project folders. The selected directory
-  becomes the listing's containment base, preserving ignore rules and rejecting
-  escaping child symlinks. Other paths are rejected (`INVALID_ARGUMENT`).
 
 ## 13b. Desktop Menu and Window APIs
 

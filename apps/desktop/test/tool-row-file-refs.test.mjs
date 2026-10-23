@@ -350,7 +350,17 @@ test("a reference nothing answers reports itself and opens nothing", async () =>
   assert.equal(calls.toasts[0][0], "chat.fileRefMissing:missing-helper.js");
 });
 
-test("an absolute tool path outside allowed roots reports the access limit", async () => {
+test("an external local tool path opens in the host viewer without widening the plugin scope", async () => {
+  reset({ pluginView: true });
+  nextMatch = { root: "external", relativePath: "", absolutePath: "C:/elsewhere/readme.md", matchedBy: "exact-absolute" };
+  await click({ kind: "file", path: "C:\\elsewhere\\readme.md" });
+  assert.equal(calls.files[0][0], "C:/elsewhere/readme.md");
+  assert.deepEqual(calls.tabs, []);
+  assert.deepEqual(calls.enabled, []);
+  assert.deepEqual(calls.toasts, []);
+});
+
+test("a scoped lookup reports an outside-root access limit", async () => {
   reset({ pluginView: true });
   nextReason = "outside-allowed-roots";
   await click({ kind: "file", path: "C:\\elsewhere\\readme.md" });
