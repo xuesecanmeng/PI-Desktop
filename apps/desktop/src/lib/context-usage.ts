@@ -161,9 +161,12 @@ export type ContextUsage = {
 export function calculateContextUsage(
   usage: MessageUsage,
   contextWindow: number,
+  estimatedOccupancyTokens?: number,
 ): ContextUsage {
   const safeWindow = positiveTokenCount(contextWindow) || DEFAULT_CONTEXT_WINDOW;
-  const usedTokens = contextOccupancyTokens(usage);
+  const usedTokens = estimatedOccupancyTokens !== undefined && Number.isFinite(estimatedOccupancyTokens)
+    ? positiveTokenCount(estimatedOccupancyTokens)
+    : contextOccupancyTokens(usage);
   const usedRatio = Math.min(1, usedTokens / safeWindow);
   const remainingRatio = 1 - usedRatio;
   const usedPercent = Math.round(usedRatio * 100);

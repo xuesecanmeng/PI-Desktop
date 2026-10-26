@@ -1,6 +1,6 @@
 # ADR 0184: Dock the context usage inspector in the composer toolbar
 
-- Status: Accepted (amended by D355 / ADR 0193)
+- Status: Accepted (amended by D355 / ADR 0193, including its post-compaction amendment)
 - Date: 2026-09-08
 - Deciders: PI-Desktop renderer and UX maintainers
 - Amends: D103, D184, D244, ADR 0047, ADR 0103
@@ -39,7 +39,9 @@ numbers.
 5. Assistant meta under a completed turn keeps the optional model badge and
    the usage-less throughput fallback. It no longer hosts the inspector.
 6. Renderer only: no protocol, storage, runtime accounting, or model
-   metadata changes.
+   metadata changes in the original move. ADR 0193's post-compaction amendment
+   subsequently adds optional checkpoint occupancy metadata for the ring;
+   provider accounting remains unchanged.
 
 ## Consequences
 

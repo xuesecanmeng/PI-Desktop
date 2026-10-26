@@ -37,6 +37,24 @@ the last assistant message:
    billing. This change is renderer presentation of parent `message.usage`.
 4. A later streaming turn without totals still does not steal the previous
    usage-bearing turn. Delegate rows still do not drive the ring.
+5. After a successful compaction, a checkpoint's optional `tokensAfter` leads
+   the capacity display until a newer parent message reports usage. The ring,
+   heading and used/window figures prefix estimates with `≈`; provider rows,
+   billing totals, throughput and the model's window size remain unchanged.
+   Cache identity includes the selected estimate even when the transcript
+   snapshot has not changed. Missing, invalid or unloaded-boundary estimates
+   keep the last-request fallback.
+
+### Post-compaction amendment (2026-10-23)
+
+Adapted from [PR #700 by zhangqingkun976](https://github.com/vastsa/PI-Desktop/pull/700).
+The runtime stamps the installed checkpoint with its existing complete request
+budget, which already includes system prompt and tool schemas. The older PR's
+extra overhead compensation is not added to that budget. Rust persists the
+optional field in checkpoint JSONL and the existing mark/event carries it to
+the renderer. Older records omit it; no database or transcript schema migration
+is required. This extends ADR 0184's original renderer-only scope without moving
+usage accounting or persistence ownership.
 
 ## Consequences
 
@@ -44,6 +62,9 @@ the last assistant message:
 - A tool-heavy turn no longer looks like it overflowed the model window.
 - Turn-summed cache and cost remain available to the usage plugin, not the
   occupancy ring.
+- A new checkpoint updates the ring immediately without rewriting historical
+  provider usage. Legacy checkpoints without an estimate retain the previous
+  display until a newer request reports usage.
 
 ## Rejected alternatives
 

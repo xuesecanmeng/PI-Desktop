@@ -453,6 +453,13 @@ without persisting anything or changing the active checkpoint; installation
 re-estimates, appends through host-core, updates the active checkpoint, and
 emits `compaction_end`. The blocking path composes the two back to back.
 
+Installation also stores optional `tokensAfter` on the checkpoint and its
+completion mark: the complete compacted request budget, including system prompt
+and declared tools, with no second overhead adjustment. The renderer uses it as
+an approximate occupancy until newer parent-message usage arrives. It changes
+neither provider usage nor billing. Older checkpoints without this field remain
+readable and retain the last-request display fallback (ADR 0193).
+
 **What survives a checkpoint.** A successful checkpoint leaves the model context
 as the summary plus, at most, one **user** message; assistant and tool messages
 are dropped from model context and remain in the visible transcript. The

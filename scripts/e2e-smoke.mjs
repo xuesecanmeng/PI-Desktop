@@ -210,6 +210,21 @@ async function main() {
       `messages=${got.session?.messages?.length}`,
     );
 
+    // Optional checkpoint occupancy survives the host wire/storage boundary.
+    const compactSession = await host.call("session.create", { title: "Compaction occupancy", mode: "agent" });
+    const compactSessionId = compactSession.session.id;
+    const boundary = randomUUID();
+    await host.call("session.appendMessage", { sessionId: compactSessionId, message: {
+      id: boundary, role: "user", content: "fixture history", createdAt: new Date().toISOString(), status: "complete",
+    } });
+    await host.call("session.appendCompaction", { sessionId: compactSessionId, compaction: {
+      id: randomUUID(), summary: "fixture summary", throughMessageId: boundary,
+      tokensBefore: 200_000, tokensAfter: 24_000, createdAt: new Date().toISOString(),
+    } });
+    const compacted = await host.call("session.get", { id: compactSessionId });
+    record("E2E-COMPACTION-occupancy", compacted.session?.compaction?.tokensAfter === 24_000 &&
+      compacted.session?.compactions?.[0]?.tokensAfter === 24_000 && compacted.session?.messages?.length === 1);
+
     // Durable notification lifecycle: terminal turns create one inbox item,
     // read state mutates in place, and clear removes the retained history.
     const notificationTurn = await host.call("session.beginTurn", {

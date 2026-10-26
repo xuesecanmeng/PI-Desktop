@@ -47,6 +47,12 @@ describe("checkpointSummarized", () => {
 });
 
 describe("contextCompactionMark", () => {
+  it("carries post-compaction occupancy without inventing it for legacy records", () => {
+    expect(contextCompactionMark(record({ tokensAfter: 21_000 }))).toMatchObject({ tokensAfter: 21_000 });
+    expect(contextCompactionMark(record({ tokensAfter: 0 }))).toMatchObject({ tokensAfter: 0 });
+    expect(contextCompactionMark(record())).not.toHaveProperty("tokensAfter");
+  });
+
   it("describes one compaction for its transcript row and the inspector", () => {
     expect(contextCompactionMark(record({ details: { generation: 3 } }))).toEqual({
       id: "checkpoint-1",

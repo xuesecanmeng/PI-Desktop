@@ -7472,6 +7472,8 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     ) {
       return "oversized";
     }
+    // This full-request budget already includes system prompt and tool overhead.
+    checkpoint.tokensAfter = compactedBudget.tokens;
     try {
       await this.host.call("session.appendCompaction", {
         sessionId: this.sessionId,

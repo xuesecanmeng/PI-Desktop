@@ -18,6 +18,8 @@ export type LatestTurnContextInspector = {
   responseDurationMs?: number;
   responseOutputTokens?: number;
   responseOutputEstimated: boolean;
+  /** The newest checkpoint's full request estimate, until newer real usage. */
+  estimatedOccupancyTokens?: number;
 };
 
 const inspectors = new WeakMap<object, LatestTurnContextInspector>();
@@ -40,15 +42,28 @@ export function latestTurnContextInspector(
   compactions?: readonly ContextCompactionMark[],
 ): LatestTurnContextInspector | undefined {
   let latestUsageMessage: UiMessage | undefined;
+  let latestUsageIndex = -1;
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index];
     if (!message.parentToolCallId && message.usage) {
       latestUsageMessage = message;
+      latestUsageIndex = index;
       break;
     }
   }
   const latestUsage = latestUsageMessage?.usage;
   if (!latestUsage) return undefined;
+
+  const latestMark = compactions?.at(-1);
+  const boundaryIndex = latestMark
+    ? messages.findIndex((message) => message.id === latestMark.throughMessageId)
+    : -1;
+  const estimatedOccupancyTokens =
+    latestMark?.tokensAfter !== undefined &&
+    Number.isFinite(latestMark.tokensAfter) && latestMark.tokensAfter >= 0 &&
+    boundaryIndex >= latestUsageIndex
+      ? Math.round(latestMark.tokensAfter)
+      : undefined;
 
   const { entries } = getTranscriptProjection(messages, compactions);
   let latestTurn: ReturnType<typeof getAssistantTurnSummary> | undefined;
@@ -75,6 +90,7 @@ export function latestTurnContextInspector(
     responseDurationMs: latestTurn?.responseDurationMs,
     responseOutputTokens: latestTurn?.responseOutputTokens,
     responseOutputEstimated: latestTurn?.responseOutputEstimated ?? false,
+    estimatedOccupancyTokens,
   };
   const owner = getSessionMessageSnapshot(messages).owner;
   const previous = inspectors.get(owner);
@@ -84,6 +100,7 @@ export function latestTurnContextInspector(
     previous.responseDurationMs === result.responseDurationMs &&
     previous.responseOutputTokens === result.responseOutputTokens &&
     previous.responseOutputEstimated === result.responseOutputEstimated &&
+    previous.estimatedOccupancyTokens === result.estimatedOccupancyTokens &&
     previous.tools.length === result.tools.length &&
     previous.tools.every((tool, index) => tool === result.tools[index])
   ) return previous;

@@ -36,6 +36,33 @@
   boundaries; existing updater-controller and preference suites cover unmarked
   releases.
 
+### E2E-COMPACTION-occupancy
+
+- **Preconditions:** Dedicated request worktree, reused toolchain/dependencies,
+  isolated Electron profile and Host data; no real provider credentials.
+- **Steps:** Start with a 200K provider usage report in a 256K window. Invoke
+  the manual action used by `/compact` and receive its successful completion
+  mark with a 24K post-compaction estimate. Open the inspector, switch between
+  remaining/used display, leave and restore the session, then receive a new
+  response reporting 11K usage. Round-trip `tokensAfter` through Host RPC and
+  JSONL; load a legacy checkpoint without the field. Exercise the real runtime
+  compaction path with a fixture provider and system/tool request overhead.
+- **Expected:** The unchanged transcript immediately displays `≈91%` remaining
+  or `≈9%` used; heading, used/window count and accessible name agree. Restoring
+  the checkpoint retains the estimate. New usage shows `4%` used without `≈`.
+  Provider totals remain historical real measurements. Cached projection objects
+  cannot hide an estimate-only update. Legacy or invalid estimates fall back;
+  failed/no-new-context compaction behavior and the model window are unchanged.
+- **Coverage:** `node --test test/context-compaction-user-path.test.mjs` from
+  `apps/desktop` covers real store/API/preload/event/component wiring with a
+  fixture completion event. Resolver/capacity tests cover cache invalidation
+  and delegate exclusion; runtime tests verify full request estimation and mark
+  emission. `node scripts/e2e-smoke.mjs` covers the Host wire round trip; Rust
+  transcript/session tests cover persistence, legacy loading and validation.
+- **Specs:** [runtime](../03-runtime/02-agent-runtime.md),
+  [Host RPC](../03-runtime/06-host-rpc-protocol.md),
+  [inspector](../04-ux/08-component-spec.md), [ADR 0193](../../adr/0193-last-request-context-occupancy.md).
+
 ### E2E-FILE-opening-preferences-and-directories
 
 - **Preconditions:** Dedicated request worktree, current Main base, reused host

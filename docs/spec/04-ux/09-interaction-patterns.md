@@ -907,6 +907,11 @@ may be retained while exactly one workspace supplies the visible shell context.
 - The context usage inspector keeps one muted line for the newest checkpoint,
   shown while its panel is open — the count and summary cost sit below the
   compact model/tool usage summaries without adding explanatory copy.
+- After a successful checkpoint, the ring and capacity figures immediately use
+  its saved full-request occupancy estimate with `≈`, in both used and remaining
+  modes. A newer parent response replaces it with measured usage. The provider
+  breakdown and fixed model window are unchanged. Session restore retains the
+  estimate; older checkpoints without it retain the last-request fallback.
 - The open context usage inspector shows elapsed session wall time plus three
   cumulative timing rows: request-to-first-response wait, streamed model
   response time (thinking and answer), and top-level tool execution time.

@@ -34,6 +34,14 @@ test("context usage exposes the remaining ring percentage", () => {
   assert.equal(context.remainingRatio, 28 / 128);
 });
 
+test("post-compaction occupancy overrides only capacity and accepts an empty estimate", () => {
+  const usage = { inputTokens: 190_000, outputTokens: 10_000, totalTokens: 200_000 };
+  assert.equal(calculateContextUsage(usage, 256_000, 24_000).usedTokens, 24_000);
+  assert.equal(calculateContextUsage(usage, 256_000, 0).remainingTokens, 256_000);
+  assert.equal(calculateContextUsage(usage, 256_000).usedTokens, 200_000);
+  assert.equal(usage.totalTokens, 200_000);
+});
+
 test("context usage display preference picks the ring's leading figure", () => {
   const context = calculateContextUsage(
     { inputTokens: 80, outputTokens: 20, totalTokens: 100 },

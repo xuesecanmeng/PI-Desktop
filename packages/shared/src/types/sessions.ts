@@ -116,6 +116,8 @@ export type ContextCompactionRecord = {
   firstKeptMessageId?: string;
   throughMessageId: string;
   tokensBefore: number;
+  /** Full next-request occupancy estimated when installed; absent on legacy checkpoints. */
+  tokensAfter?: number;
   usage?: unknown;
   retainedTail?: unknown[];
   details?: unknown;
@@ -152,6 +154,8 @@ export type ContextCompactionMark = ContextCompactionStatus & {
    * notice as a summary.
    */
   fallback?: ContextCompactionFallback;
+  /** Post-compaction occupancy until a newer provider usage report arrives. */
+  tokensAfter?: number;
 };
 
 export type ContextCompactionReason = "manual" | "threshold" | "overflow";

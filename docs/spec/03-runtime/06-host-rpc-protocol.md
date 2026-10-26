@@ -395,7 +395,11 @@ to later refresh and inference; the vendor picker does not collect them.
   leftovers so the outbox can append first. Returns `{ ok, count }`.
 - `session.appendCompaction` — sidecar-only append of the newest typed
   model-context checkpoint. It requires non-empty checkpoint/summary/boundary
-  ids and non-negative `tokensBefore`; it does not insert a message/search row
+  ids and non-negative `tokensBefore` and optional `tokensAfter`. The latter
+  is the complete post-compaction request estimate, persisted in JSONL and
+  returned by `session.get` in both `compaction` and `compactions`. Omission
+  remains compatible with legacy records and readers; this additive metadata
+  does not require a protocol-version or database-schema bump. It does not insert a message/search row
   or change the visible transcript projection
 - `session.replaceMessages` — atomic transcript rewrite (temp-file rename +
   one index transaction, D119) used by message delete and unanswered

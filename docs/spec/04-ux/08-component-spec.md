@@ -2037,7 +2037,7 @@ Single message render — either user (plaintext) or assistant (markdown streami
   keyboard focus), Escape, or an outside pointer press, and disables its
   transition under reduced motion. The compact
   Codex-style context inspector lives in the composer right toolbar,
-  immediately left of the model × reasoning chip, and always mirrors the
+  immediately left of the model × reasoning chip, and normally mirrors the
   newest assistant turn that reported usage (D347). Occupancy, remaining
   capacity, used/window counts, turn total, and provider
   input/output/cache/reasoning/hit-rate are that turn's newest usage-bearing
@@ -2092,6 +2092,13 @@ Single message render — either user (plaintext) or assistant (markdown streami
   the panel adds one muted summary line for the compaction count and newest
   summary's estimated token cost; the transcript still shows one row per
   compaction (D203).
+  A successful checkpoint's `tokensAfter` immediately replaces stale occupancy
+  in the ring, heading, accessible name and used/window counts, with an `≈`
+  prefix. Both used and remaining display modes follow that estimate. A newer
+  usage-bearing parent response replaces it and removes the prefix. Provider
+  input/output/cache values, billing and the model window stay unchanged;
+  summary tokens alone are not the whole request occupancy. Restored checkpoints
+  retain the estimate; legacy records without it keep the last-request fallback.
 - Gap: 12px vertical padding between consecutive message rows (denser than
   consumer chat, closer to WorkBuddy task transcript); assistant turns add a
   little extra bottom air so a completed answer separates from the next prompt

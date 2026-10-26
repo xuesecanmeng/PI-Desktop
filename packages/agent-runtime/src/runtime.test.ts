@@ -7666,6 +7666,7 @@ describe("DesktopAgentRuntime inline context compaction", () => {
           throughMessageId: "recent-user",
           generation: 1,
           summaryTokens: 7,
+          tokensAfter: 40_000,
           summarized: true,
         },
       }),
@@ -11798,6 +11799,8 @@ describe("DesktopAgentRuntime summary conversation key", () => {
   }
 
   it("sends the session id so a conversation-keyed gateway accepts the summary request", async () => {
+    const host = { call: vi.fn().mockResolvedValue(undefined) };
+    const onEvent = vi.fn();
     const requests: Record<string, unknown>[] = [];
     const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
       requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
@@ -11812,6 +11815,9 @@ describe("DesktopAgentRuntime summary conversation key", () => {
         baseUrl: "https://summary-fixture.invalid/v1",
         apiKey: "sk-fixture-not-for-logs",
       },
+      host,
+      onEvent,
+      customSystemPrompt: { append: "full request overhead ".repeat(1_000) },
       history: [
         {
           id: "old-user",
@@ -11839,6 +11845,24 @@ describe("DesktopAgentRuntime summary conversation key", () => {
 
       expect(requests).toHaveLength(1);
       expect(requests[0]?.prompt_cache_key).toBe("session-1");
+      const appended = host.call.mock.calls.find(([method]) => method === "session.appendCompaction")?.[1] as { compaction: ContextCompactionRecord } | undefined;
+      expect(appended).toBeDefined();
+      const internal = runtime as unknown as { agent: Agent; contextBudget(messages: AgentMessage[]): { tokens: number } };
+      const { messages, model, systemPrompt, tools } = internal.agent.state;
+      if (!model) throw new Error("Fixture model is missing");
+      const requestMessages = messages.filter((message): message is Extract<AgentMessage, { content: unknown }> => message.role !== "system" && "content" in message);
+      const requestFloor = estimateOutputCapInputTokens({
+        messages: requestMessages,
+        systemPrompt,
+        tools: tools.map(toToolDeclaration),
+      }, model);
+      expect(requestFloor).toBeGreaterThan(estimateOutputCapInputTokens({ messages: requestMessages }, model));
+      expect(appended?.compaction.tokensAfter).toBe(internal.contextBudget(messages).tokens);
+      expect(appended?.compaction.tokensAfter).toBeGreaterThanOrEqual(requestFloor);
+      expect(onEvent.mock.calls.map(([envelope]) => envelope.event)).toContainEqual(expect.objectContaining({
+        type: "compaction_end", ok: true, mark: expect.objectContaining({ tokensAfter: appended?.compaction.tokensAfter }),
+      }));
+      expect(appended?.compaction.usage).toMatchObject({ input: 100, output: 8 });
       const logged = stderr.mock.calls.map(([chunk]) => String(chunk)).join("");
       expect(logged).not.toContain("compaction summary failed");
     } finally {

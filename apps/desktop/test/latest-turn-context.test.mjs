@@ -24,6 +24,46 @@ const providerModels = {
 };
 const providers = [{ id: "provider", contextWindow: 64_000, models: [] }];
 
+test("a compaction refreshes the same cached transcript before newer real usage replaces its estimate", () => {
+  const usage = { inputTokens: 190_000, outputTokens: 10_000, totalTokens: 200_000 };
+  const history = [message("before", "assistant", "done", { providerId: "provider", modelId: "catalog-model", usage })];
+  const before = latestTurnContextInspector(history, providerModels, providers);
+  assert.equal(before?.estimatedOccupancyTokens, undefined);
+  const mark = { id: "compacted", generation: 1, summaryTokens: 100, summarized: true, throughMessageId: "before", tokensAfter: 24_000 };
+  const after = latestTurnContextInspector(history, providerModels, providers, [mark]);
+  assert.equal(after?.estimatedOccupancyTokens, 24_000);
+  assert.notEqual(after, before);
+  assert.equal(after?.usage, usage);
+  assert.equal(after?.contextWindow, 256_000);
+  assert.equal(latestTurnContextInspector(history, providerModels, providers, [mark]), after);
+  const updated = latestTurnContextInspector(history, providerModels, providers, [{ ...mark, tokensAfter: 12_000 }]);
+  assert.equal(updated?.estimatedOccupancyTokens, 12_000);
+  assert.notEqual(updated, after);
+  const real = { inputTokens: 10_000, outputTokens: 1_000, totalTokens: 11_000 };
+  const next = latestTurnContextInspector([...history, message("next", "assistant", "reply", { usage: real })], providerModels, providers, [mark]);
+  assert.equal(next?.estimatedOccupancyTokens, undefined);
+  assert.equal(next?.usage, real);
+});
+
+test("restored compaction marks tolerate legacy, invalid and unavailable estimates", () => {
+  const history = [message("before", "assistant", "done", { usage: { inputTokens: 100, outputTokens: 5, totalTokens: 105 } })];
+  const mark = { id: "compacted", generation: 1, summaryTokens: 1, summarized: true, throughMessageId: "before" };
+  for (const tokensAfter of [undefined, -1, NaN, Infinity]) {
+    assert.equal(latestTurnContextInspector(history, providerModels, providers, [{ ...mark, tokensAfter }])?.estimatedOccupancyTokens, undefined);
+  }
+  assert.equal(latestTurnContextInspector(history, providerModels, providers, [{ ...mark, tokensAfter: 0 }])?.estimatedOccupancyTokens, 0);
+  assert.equal(latestTurnContextInspector(history, providerModels, providers, [{ ...mark, throughMessageId: "unloaded", tokensAfter: 10 }])?.estimatedOccupancyTokens, undefined);
+});
+
+test("delegate usage does not displace the parent's post-compaction occupancy", () => {
+  const history = [
+    message("parent", "assistant", "done", { usage: { inputTokens: 200, outputTokens: 10, totalTokens: 210 } }),
+    message("delegate", "assistant", "done", { parentToolCallId: "task", usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } }),
+  ];
+  const mark = { id: "compacted", generation: 1, summaryTokens: 1, summarized: true, throughMessageId: "parent", tokensAfter: 20 };
+  assert.equal(latestTurnContextInspector(history, providerModels, providers, [mark])?.estimatedOccupancyTokens, 20);
+});
+
 function message(id, role, content, extra = {}) {
   return {
     id,

@@ -2723,6 +2723,7 @@ pub fn append_compaction(
         || compaction.summary.trim().is_empty()
         || compaction.through_message_id.trim().is_empty()
         || compaction.tokens_before < 0
+        || compaction.tokens_after.is_some_and(|tokens| tokens < 0)
     {
         return Err(anyhow!("invalid compaction record"));
     }
@@ -4422,6 +4423,7 @@ mod tests {
             first_kept_message_id: Some(first.into()),
             through_message_id: through.into(),
             tokens_before: 120_000,
+            tokens_after: None,
             usage: None,
             retained_tail: Some(json!([{
                 "role": "user",
@@ -4433,6 +4435,17 @@ mod tests {
             model_id: Some("model-1".into()),
             created_at: "2026-07-28T00:00:03Z".into(),
         }
+    }
+
+    #[test]
+    fn compaction_rejects_negative_post_compaction_occupancy() {
+        let db = test_db();
+        let mut record = checkpoint("m1", "m1");
+        record.tokens_after = Some(-1);
+        assert!(append_compaction(&db, "s1", &record)
+            .unwrap_err()
+            .to_string()
+            .contains("invalid compaction record"));
     }
 
     #[test]

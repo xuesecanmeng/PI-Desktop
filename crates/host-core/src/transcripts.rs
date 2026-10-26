@@ -70,6 +70,9 @@ pub struct CompactionRecord {
     pub first_kept_message_id: Option<String>,
     pub through_message_id: String,
     pub tokens_before: i64,
+    /// Full next-request occupancy at installation; legacy records omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_after: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1557,6 +1560,7 @@ mod tests {
             first_kept_message_id: Some("m1".into()),
             through_message_id: "m2".into(),
             tokens_before: 42_000,
+            tokens_after: Some(21_000),
             usage: Some(json!({ "input": 100, "output": 20 })),
             retained_tail: Some(json!([{ "role": "user", "content": "again", "timestamp": 1 }])),
             details: None,
@@ -1962,6 +1966,28 @@ mod tests {
         assert_eq!(restored[0].id, "compact-1");
         assert_eq!(restored[0].through_message_id, "m2");
         assert_eq!(restored[0].tokens_before, 42_000);
+        assert_eq!(restored[0].tokens_after, Some(21_000));
+    }
+
+    #[test]
+    fn legacy_checkpoint_without_post_compaction_occupancy_still_loads() {
+        let dir = tempdir().unwrap();
+        let path = transcript_path(dir.path(), "s1").unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let header = header_line("s1", "2026-07-26T00:00:00Z").unwrap();
+        let legacy = json!({
+            "type": "compaction", "id": "legacy", "summary": "summary",
+            "throughMessageId": "m1", "tokensBefore": 42_000,
+            "createdAt": "2026-07-26T00:00:02Z"
+        });
+        std::fs::write(&path, format!("{header}\n{legacy}\n")).unwrap();
+        let restored = read_compactions(dir.path(), "s1").unwrap();
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].tokens_after, None);
+        assert!(serde_json::to_value(&restored[0])
+            .unwrap()
+            .get("tokensAfter")
+            .is_none());
     }
 
     #[test]
