@@ -22,6 +22,8 @@ app.commandLine.appendSwitch("disable-background-networking");
 protocol.registerSchemesAsPrivileged([GEN_UI_SCHEME_PRIVILEGES]);
 let nativeHost;
 process.once("exit", () => nativeHost?.child?.kill());
+// Keep the fixture alive while the native Host shuts down after its window closes.
+app.on("window-all-closed", () => {});
 
 async function run() {
   const { Host, resolveHostBinary } = await import(pathToFileURL(join(root, "scripts/e2e/host.mjs")).href);
