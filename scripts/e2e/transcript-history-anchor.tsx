@@ -4,6 +4,7 @@ import { flushSync } from "react-dom";
 import type { UiMessage } from "@pi-desktop/shared";
 import type { TranscriptEntry } from "../../apps/desktop/src/lib/assistant-turns";
 import { useTranscriptScroll } from "../../apps/desktop/src/features/chat/transcript/hooks/useTranscriptScroll";
+import { transcriptHistoryPagingProbe } from "./transcript-history-paging";
 
 declare global {
   var transcriptHistoryProbe: () => Promise<unknown>;
@@ -197,5 +198,6 @@ globalThis.transcriptHistoryProbe = async () => {
       host.remove();
     }
   }
-  return { ok: results.every((result) => !result.error), results };
+  const paging = await transcriptHistoryPagingProbe();
+  return { ok: results.every((result) => !result.error) && paging.ok, results, paging };
 };

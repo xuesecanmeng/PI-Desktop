@@ -6155,9 +6155,15 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   top-of-history frame, and opening it does not visibly slow down as the
   conversation grows. Each older page prepends without moving the message the
   user is reading, including deferred projection commits and offscreen rows
-  resolving their intrinsic placeholder heights. If a live anchor's row becomes
-  temporarily unmounted during a stream update, its fallback keeps the current
-  reading offset; restoring a pane still uses its saved bookmark. Continue scrolling while an
+  resolving their intrinsic placeholder heights. Repeat with a single assistant
+  turn spanning several physical pages, interleaved progress text and tool rows,
+  and a final answer outside its collapsed process. Loading earlier parts can
+  regroup the outer turn but must retain the same visible source message and
+  viewport offset after every page, including automatic consecutive reads.
+  Correction scroll events must not acquire an earlier placeholder row as the
+  target. If a live anchor's row becomes temporarily hidden or unmounted, leave
+  the current offset alone and retry that target after it remounts; restoring a
+  pane still uses its saved bookmark. Continue scrolling while an
   older-page read is pending: its completion preserves the new reading position
   and later input remains free. Return to latest and sending a new turn still
   resume pinned follow. Paging back reaches the true first message with none skipped
@@ -6173,8 +6179,9 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 - **Status**: Unit-covered (`transcripts::tests::layout_window_reads_only_the_requested_tail`,
   `sessions::tests::bounded_reads_use_physical_line_positions_not_the_dedup_counter`);
   renderer history anchoring automated by `pnpm test:e2e:transcript-history`
-  (production scroll hook, real React/Chromium layout, synthetic messages and
-  controlled page reads); full Host/pane-switch UI scenario Draft
+  (production scroll hook and `SessionPane`, real React/Chromium layout and
+  production styles, synthetic messages and controlled reading-runtime page
+  responses); full Host/pane-switch UI scenario Draft
 
 #### E2E-SESSION-list-refresh-keeps-desktop-responsive: Large session-list refreshes keep Electron responsive
 

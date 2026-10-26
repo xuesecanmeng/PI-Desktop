@@ -128,6 +128,13 @@ Outer frame that positions Topbar, Sidebar, MainChat, and WorkPanel. Owns resize
   the message is already loaded but outside the mounted row window, first restore
   the saved absolute scroll offset; the bounded window can then grow as the user
   scrolls toward the anchor.
+  Upward paging anchors the visible source message and its viewport offset,
+  excluding fragments inside collapsed disclosures. Prepending part of an
+  assistant turn may change its outer group identity without changing the
+  reading target. Correction scroll events retain that target through deferred
+  projection and intrinsic-height layout; later reader input can acquire a new
+  target. A temporarily missing live target leaves the current offset alone
+  until it remounts, without replaying a saved bookmark offset.
   Restored ranges continue automatically near the visible lower boundary, in
   bounded pages and without a Load later messages button. Appending a page must
   preserve the viewport; hidden panes must not initiate continuation. Do not

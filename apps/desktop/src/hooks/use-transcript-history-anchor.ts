@@ -1,43 +1,39 @@
 import { useCallback, useRef, type RefObject } from "react";
 import {
-  captureTranscriptReadingPosition,
-  restoreTranscriptReadingPosition,
-  type TranscriptReadingPosition,
-} from "../lib/transcript-reading-position";
+  captureTranscriptHistoryAnchor,
+  restoreTranscriptHistoryAnchor,
+  type TranscriptHistoryAnchor,
+} from "../lib/transcript-history-anchor";
 
 /** Keep the visible message stable through deferred prepends and late layout. */
 export function useTranscriptHistoryAnchor(
   scrollRef: RefObject<HTMLDivElement | null>,
   contentRef: RefObject<HTMLDivElement | null>,
-  windowSize: number,
   onPosition: (top: number) => void,
 ) {
-  const positionRef = useRef<TranscriptReadingPosition | undefined>(undefined);
+  const positionRef = useRef<TranscriptHistoryAnchor | undefined>(undefined);
   const capture = useCallback(() => {
     const scroller = scrollRef.current;
     const content = contentRef.current;
     if (!scroller || !content) return;
-    positionRef.current = captureTranscriptReadingPosition(scroller, content, false, windowSize);
-  }, [contentRef, scrollRef, windowSize]);
+    const previous = positionRef.current;
+    const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    // Correction events must not replace the target with a newly prepended row
+    // whose content-visibility placeholder has not resolved yet.
+    if (previous && scroller.scrollTop === Math.min(previous.scrollTop, maxTop)) return;
+    positionRef.current = captureTranscriptHistoryAnchor(scroller, content);
+  }, [contentRef, scrollRef]);
   const release = useCallback(() => { positionRef.current = undefined; }, []);
   const restore = useCallback(() => {
     const position = positionRef.current;
     const scroller = scrollRef.current;
     const content = contentRef.current;
     if (!position || !scroller || !content) return false;
-    // Input can move the viewport while a page is in flight. Compensate only
-    // the layout change; a boundary clamp is not reader input.
-    const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    const previousTop = Math.min(position.scrollTop, maxTop);
-    const offset = position.offset - (scroller.scrollTop - previousTop);
-    // A live anchor's fallback must not replay a bookmark older than reader input.
-    if (!restoreTranscriptReadingPosition(scroller, content, { ...position, offset, scrollTop: scroller.scrollTop })) {
-      release();
-      return false;
-    }
+    const restored = restoreTranscriptHistoryAnchor(scroller, content, position);
+    if (!restored) return false;
+    positionRef.current = restored;
     onPosition(scroller.scrollTop);
-    capture();
     return true;
-  }, [capture, contentRef, onPosition, release, scrollRef]);
+  }, [contentRef, onPosition, scrollRef]);
   return { capture, restore, release };
 }

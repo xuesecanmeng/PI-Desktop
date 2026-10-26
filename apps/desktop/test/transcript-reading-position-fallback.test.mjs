@@ -56,9 +56,9 @@ const bookmark = (overrides = {}) => ({
   ...overrides,
 });
 
-test("a live history anchor fallback preserves input newer than its snapshot", () => {
+test("a missing live history anchor preserves later input until the row remounts", () => {
   const scroller = fakeScroller({ scrollTop: 480 });
-  const row = { dataset: { messageId: "visible" },
+  const row = { dataset: { messageId: "visible" }, closest: () => null,
     getBoundingClientRect: () => ({ top: 0, bottom: 100, height: 100 }) };
   let mounted = true;
   const content = { ...fakeContent(),
@@ -68,7 +68,7 @@ test("a live history anchor fallback preserves input newer than its snapshot", (
   const positions = [];
   let anchor;
   function Fixture() {
-    anchor = useTranscriptHistoryAnchor({ current: scroller }, { current: content }, 60,
+    anchor = useTranscriptHistoryAnchor({ current: scroller }, { current: content },
       top => positions.push(top));
     return null;
   }
@@ -76,9 +76,12 @@ test("a live history anchor fallback preserves input newer than its snapshot", (
   anchor.capture();
   mounted = false;
   scroller.scrollTop = 240;
-  assert.equal(anchor.restore(), true);
+  assert.equal(anchor.restore(), false);
   assert.equal(scroller.scrollTop, 240, "a missing row must not replay the older absolute bookmark");
-  assert.deepEqual(positions, [240]);
+  assert.deepEqual(positions, []);
+  mounted = true;
+  assert.equal(anchor.restore(), true, "a temporarily missing target must remain pending");
+  assert.deepEqual(positions, [0]);
 });
 
 test("an anchored row that is mounted still restores by its rect", () => {

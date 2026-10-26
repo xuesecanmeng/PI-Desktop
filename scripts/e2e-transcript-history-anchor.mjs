@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveElectronBinary } from "./e2e/boot.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,7 +28,7 @@ try {
       "process.env.NODE_ENV": '"production"',
       "import.meta.env": '{"DEV":false,"MODE":"production"}',
     },
-    // The fixture measures its own geometry, so no app stylesheet is needed.
+    // Load the built stylesheet below so the real transcript uses production layout.
     loader: { ".css": "empty" },
     alias: {
       "@pi-desktop/i18n": join(root, "packages/i18n/src/index.ts"),
@@ -36,10 +36,27 @@ try {
       "react-dom": join(root, "apps/desktop/node_modules/react-dom"),
     },
     nodePaths: [join(root, "apps/desktop/node_modules")],
+    plugins: [{
+      name: "local-url-assets",
+      setup(build) {
+        build.onResolve({ filter: /\?url$/ }, ({ path, resolveDir }) => ({
+          path: join(resolveDir, path.slice(0, -4)), namespace: "local-url-asset",
+        }));
+        build.onLoad({ filter: /.*/, namespace: "local-url-asset" }, async ({ path }) => ({
+          contents: await readFile(path), loader: "file",
+        }));
+      },
+    }],
   });
+  const renderer = join(root, "apps/desktop/out/renderer");
+  const appHtml = await readFile(join(renderer, "index.html"), "utf8");
+  const styles = [...appHtml.matchAll(/href="([^" ]+\.css)"/g)].map((match) =>
+    `<link rel="stylesheet" href="${pathToFileURL(join(renderer, match[1])).href}">`,
+  ).join("");
+  assert(styles, "Build the desktop before running the real history-paging fixture");
   await writeFile(
     join(temp, "index.html"),
-    '<!doctype html><meta charset="utf-8"><title>Transcript history anchor regression</title><script src="renderer.js"></script>',
+    `<!doctype html><meta charset="utf-8"><title>Transcript history anchor regression</title>${styles}<script src="renderer.js"></script>`,
   );
   await writeFile(
     join(temp, "main.cjs"),

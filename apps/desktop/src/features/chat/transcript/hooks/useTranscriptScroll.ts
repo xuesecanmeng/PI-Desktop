@@ -132,7 +132,7 @@ export function useTranscriptScroll({
     capture: captureHistoryAnchor,
     restore: restoreHistoryAnchor,
     release: releaseHistoryAnchor,
-  } = useTranscriptHistoryAnchor(scrollRef, contentRef, windowSize, recordScrollPosition);
+  } = useTranscriptHistoryAnchor(scrollRef, contentRef, recordScrollPosition);
   const readingPositionMissing = useCallback(() => {
     pinnedRef.current = true;
     setShowJump(false);
