@@ -23,15 +23,10 @@
 思考活动，该文字会移入过程，但不会改写已存消息。`UiMessage` 没有语义化的最终回答标记，
 因此渲染器不根据措辞猜测。用户消息、系统消息和压缩分隔线继续保留原有回合边界。
 
-One turn renders exactly one process disclosure. Every row the turn produced
-before its answer lives inside it — the activity groups and the `Bash` run rows
-alike — so a long turn collapses in one gesture instead of leaving a column of
-sibling disclosures above the answer. The answer itself stays outside it. When
-the turn ends, the outer process closes even after interaction while running.
-Focus inside it moves to its visible header without claiming a manual scroll
-anchor. The user can reopen it afterward, and later updates preserve that choice.
-When the turn produced no final text, the process header and its error or
-pending-action surfaces remain visible.
+每个回合只渲染一个过程披露。回合在给出答案之前产生的所有行都位于其中——活动组与 `Bash`
+命令行同样如此——因此长回合可以用一次操作收起，而不会在答案上方留下一列并列披露。答案本身
+位于披露之外。未操作的过程在回合完成时收起，因此只剩最终回答；若回合没有产出最终文字，
+过程标题及其错误或待处理操作面仍会保留。
 
 在该披露内部，活动如何分组由显示模式决定。`AppSettings.transcriptDisplayMode` 取值为
 `flat`、`command-first` 或 `fully-folded`；缺失或无效值解析为 `fully-folded`，即
@@ -56,13 +51,15 @@ v0.20.0 发布的布局。三种模式都只渲染一个外层披露。
 尚未被用户接管的活动组就会在后续恢复期间保持展开，并在回合完成后收起。关闭回合披露会一并
 关闭其下的组，重新展开则恢复用户此前展开过的组。
 
-回合披露的标题只陈述回合的结果，绝不回显正在处理的具体项，因为一条 shell 命令或搜索词可能
-任意长。其取值优先级依次为失败、已停止、执行中、已完成：已记录的失败优先于停止，因为该回合
-没有产出答案，而看起来正常的标题会掩盖这一点。停止取自被中止的消息，这是运行时唯一记录的信
-号——回合结果只区分完成与失败。工具或思考仍在执行时，被中止的活动行同样记录停止；委派子任务
-的行不决定父回合结果。执行期间，用户可能长时间停留的阶段（压缩上下文、恢复）会各自
-命名；当前步骤为推理时显示 `Thinking`，瞬时阶段则显示为普通执行中。转录未记录时间时不显示
-时长，而不是显示为零；问题计数与标签并列显示。
+回合披露的标题陈述回合结果，并只保留有界元数据：状态、已记录的耗时与直接工具／搜索数。
+它绝不回显正在处理的具体项，因为一条 shell 命令或搜索词可能任意长。其取值优先级依次为
+失败、已停止、执行中、已完成：已记录的失败优先于停止，因为该回合没有产出答案，而看起来
+正常的标题会掩盖这一点。停止取自被中止的消息，这是运行时唯一记录的信号——回合结果只区分
+完成与失败。工具或思考仍在执行时，被中止的活动行同样记录停止；委派子任务的行不决定父回合
+结果。执行期间，用户可能长时间停留的阶段（压缩上下文、恢复）会各自命名；当前步骤为推理时
+显示 `Thinking`，瞬时阶段则显示为普通执行中。转录未记录时间时不显示时长，而不是显示为零；
+此层不重复问题计数，失败已由状态本身表明。标题是一条由细线分隔的整行：状态、耗时、工具数
+与折叠指示组成一个左对齐序列，指示器紧跟在工具数之后。悬停只加深文字颜色，不绘制背景。
 
 披露与其组标题共用同一条左边缘。嵌套活动组沿用已发布的 v0.20.1 层级：组正文将子行缩进
 12px，组的折叠栏位于该沟槽中——静息时不可见，悬停或聚焦时显示 2px 竖条，点击即收起该组。
@@ -82,16 +79,11 @@ v0.20.0 发布的布局。三种模式都只渲染一个外层披露。
 且与思考偏好无关。组默认值不变，打开一个已收起的祖先仍会恢复已保留的条目选择，不会展开
 所有后代。
 
-Each header toggles only its own level. Parent and child states are independent:
-closing a parent preserves descendant choices, reopening restores them, and
-sibling groups do not form an accordion. Manual interaction with an item claims
-its containing group as user-owned without toggling it. Nested choices survive
-completion; the outer process alone resets to closed when the turn ends, retaining
-descendants for inspection when reopened. Manual choices otherwise survive
-streaming, completion, preference changes, reparenting from singleton to
-group, row remounts and pane eviction through the session reading bookmark.
-Session deletion or renderer restart releases this presentation memory; it is not
-stored in messages or host settings.
+每个标题只切换自己的层级。父子状态彼此独立：收起父级会保留后代选择，重新展开会恢复
+这些选择，同级组不是互斥手风琴。用户操作某个条目时，会把所属组标记为用户接管，但不会
+切换该组；完成事件不得收起包含用户已展开、聚焦或选择内容的容器。只要所属的保留会话
+窗格仍存在，手动选择就跨流式更新、完成、偏好切换、单项变组和行重新挂载保留。窗格淘汰、
+会话删除或渲染器重启会释放这些展示状态；它们不写入消息或宿主设置。
 
 搜索和导航只展开目标所需的祖先路径：拥有该消息的回合过程，以及存在时的活动组。条目级
 精确定位不在本次范围内，各行详情仍由各自的折叠控制。同一请求重新渲染时，不会反复覆盖
@@ -108,8 +100,9 @@ stored in messages or host settings.
 `keepCommandsExpanded` 仅为持久化设置兼容性保留，不再在界面中暴露；
 `keepCommandsExpanded` 也不再参与渲染读取。这些偏好只改变展示，不改变提供商思考级别、
 运行时或模型上下文、已存推理、导出、权限、执行或复制载荷，思考偏好也不控制回合过程或
-活动组的折叠。过程标题使用已记录的计时、直接工具／搜索计数、运行状态和问题计数；不会
-重复计算委派子任务，也不会把单个失败工具误报为整个助手回合失败。
+活动组的折叠。过程标题使用已记录的计时、直接工具／搜索计数和运行状态；不会
+重复计算委派子任务，也不会把单个失败工具误报为整个助手回合失败。顶层折叠不重复显示
+问题计数；活动组标题保留各自有界的问题摘要。
 
 ## 结果
 
@@ -125,8 +118,9 @@ stored in messages or host settings.
   新消息。
 - `showThinking` 开启时，`flat` 与 `command-first` 中的思考行默认展开；`fully-folded`
   保留仅活动行自动展开的例外。
-- 标题用一行说明回合的结果。回显当前命令的做法已被移除：它会把计数挤出该行，并且与打开该项
-  已经能看到的内容重复。
+- 标题用一行说明回合的结果，并只保留状态、已记录的耗时与直接工具／搜索数。标题行由细线
+  分隔，折叠指示紧跟工具数，悬停只改变文字颜色。回显当前命令的做法已被移除：它会把计数
+  挤出该行，并且与打开该项已经能看到的内容重复。
 - 披露记忆是以稳定回合、组和条目标识为键的窗格展示状态，不是持久化转录契约，也不
   属于中央工作流 store。
 - 只对已加载的转录条目分组；不会重建未加载历史，也不会跨压缩边界合并回合。
@@ -150,3 +144,9 @@ E2E-CHAT-turn-process-and-thinking-display。
 `apps/desktop/test/transcript-display-mode-settings.test.mjs` 覆盖设置行标签与搜索索引；
 `apps/desktop/test/settings-roundtrip.test.mjs` 覆盖规范化、写入校验与 `fully-folded`
 默认值。同步后的场景文本见 E2E-CHAT-turn-process-and-thinking-display。
+2026-10-22 修订由 `apps/desktop/test/turn-process-header.test.mjs` 渲染顶层标题，覆盖
+状态、耗时、工具数、内联指示顺序，以及完成与失败回合都不显示问题计数；
+`apps/desktop/test/turn-process-header-style.test.mjs` 覆盖整行细线、仅文字变色的悬停
+与内联指示位置；`turn-process.test.mjs` 与 `transcript-style.test.mjs` 继续覆盖阶段
+优先级与共享标题几何。同步后的场景文本见
+E2E-CHAT-turn-process-and-thinking-display。

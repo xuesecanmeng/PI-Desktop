@@ -31,7 +31,7 @@ await build({
   plugins: baseline ? [{
     name: "baseline-background-tasks",
     setup(build) {
-      build.onLoad({ filter: /[\\/](?:BackgroundTasksBar\.tsx|useBackgroundTasks\.ts|bar-visibility\.ts)$/ }, ({ path }) => ({
+      build.onLoad({ filter: /[\\/](?:TaskDock\.tsx|useBackgroundTasks\.ts|bar-visibility\.ts)$/ }, ({ path }) => ({
         contents: original(relative(root, path).replaceAll("\\", "/")),
         loader: path.endsWith(".tsx") ? "tsx" : "ts",
         resolveDir: dirname(path),

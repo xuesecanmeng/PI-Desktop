@@ -4,8 +4,7 @@ import i18n from "i18next";
 import { I18nextProvider } from "react-i18next";
 import { en } from "@pi-desktop/i18n";
 import { IPC } from "@pi-desktop/shared";
-import { BackgroundTasksBar } from "../../apps/desktop/src/components/BackgroundTasksBar";
-import { TodoDock } from "../../apps/desktop/src/components/TodoDock";
+import { TaskDock } from "../../apps/desktop/src/components/TaskDock";
 import { AskToolCard } from "../../apps/desktop/src/components/AskToolCard";
 import { useAppStore } from "../../apps/desktop/src/stores/app-store";
 import type { BackgroundTaskOutput, BackgroundTaskSummary } from "../../apps/desktop/src/lib/api";
@@ -43,7 +42,7 @@ function output(id: string): BackgroundTaskOutput {
 
 Object.defineProperty(window, "piDesktop", {
   value: {
-    invoke: async (channel: string, payload?: { id: string }) => {
+    invoke: async (channel: string, payload?: { id: string; sessionId?: string }) => {
       const call = async () => {
         if (channel === IPC.invoke.backgroundTasksList) return { tasks: [...tasks], version: revision };
         if (channel === IPC.invoke.backgroundTasksOutput) {
@@ -59,7 +58,9 @@ Object.defineProperty(window, "piDesktop", {
           for (const listener of listeners) listener();
           return { ok: true, found: true };
         }
-        if (channel === IPC.invoke.todosGet) return useAppStore.getState().sessionTodos["fixture"];
+        if (channel === IPC.invoke.todosGet) return useAppStore.getState().sessionTodos[payload!.sessionId!] ?? {
+          sessionId: payload!.sessionId!, revision: 1, updatedAt: 1, todos: [],
+        };
         throw new Error(`Unexpected fixture IPC: ${channel}`);
       };
       return { ok: true, data: await call() };
@@ -100,8 +101,7 @@ async function mount(count = 10) {
     <I18nextProvider i18n={i18n}>
       <div className="composer-dock composer-dock-docked">
         <div className="composer-stack">
-          <TodoDock sessionId="fixture" />
-          <BackgroundTasksBar />
+          <FixtureTaskDock />
           <AskToolCard request={{
             sessionId: "fixture", requestId: "fixture-ask", toolCallId: "fixture-ask",
             questions: [{ question: "Keep the background commands running?", options: ["Continue", "Stop"] }],
@@ -111,16 +111,32 @@ async function mount(count = 10) {
       </div>
     </I18nextProvider>,
   ));
-  await until(() => document.querySelectorAll(".background-task").length === count, "tasks did not render");
+  await until(() => document.querySelectorAll(".task-row").length === count, "tasks did not render");
+  const tasksTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    .find((tab) => tab.textContent?.includes("Tasks"));
+  flushSync(() => tasksTab?.click());
+  const disclosure = document.querySelector<HTMLButtonElement>(".dock-toggle")!;
+  if (disclosure.getAttribute("aria-expanded") === "false") flushSync(() => disclosure.click());
+  await until(() => document.querySelector<HTMLElement>(".task-list")!.getBoundingClientRect().height > 0,
+    "task panel did not expand");
+}
+
+function FixtureTaskDock() {
+  const sessionId = useAppStore((state) => state.activeSessionId);
+  return sessionId ? <TaskDock sessionId={sessionId} /> : null;
 }
 
 function row(index: number) {
-  const element = document.querySelectorAll<HTMLElement>(".background-task")[index];
+  const element = document.querySelectorAll<HTMLElement>(".task-row")[index];
   assert(element, `task ${index} must be reachable`);
   return element;
 }
 
 function click(index: number, label = "Output") {
+  if (label === "Output") {
+    flushSync(() => row(index).querySelector<HTMLElement>(".task-main")!.click());
+    return;
+  }
   const button = [...row(index).querySelectorAll<HTMLButtonElement>("button")]
     .find((button) => (button.getAttribute("aria-label") ?? button.textContent)?.trim() === label);
   assert(button, `${label} control is missing`);
@@ -154,18 +170,18 @@ async function probe() {
     }));
     select("A");
     for (const listener of listeners) listener();
-    await until(() => !!document.querySelector(".background-task-command")?.textContent?.includes("alpha.js"), "session A task is missing");
+    await until(() => !!document.querySelector(".task-command")?.textContent?.includes("alpha.js"), "session A task is missing");
   };
 
   await check("A-B-A navigation scopes rows and discards another session's late output", async () => {
     await mountSessions();
-    assert(document.querySelectorAll(".background-task").length === 1, "A must not show B's task");
+    assert(document.querySelectorAll(".task-row").length === 1, "A must not show B's task");
     deferOutput = true;
     click(0);
     await until(() => pending.has("task-A"), "A output request is missing");
     const resolveA = pending.get("task-A")!;
     select("B");
-    assert(document.querySelectorAll(".background-task").length === 1, "B must not show A's task");
+    assert(document.querySelectorAll(".task-row").length === 1, "B must not show A's task");
     assert(row(0).textContent?.includes("beta.js"), "B must show its own command immediately");
     assert(!document.querySelector("pre"), "A's output must disappear on session switch");
     click(0);
@@ -176,9 +192,9 @@ async function probe() {
     pending.get("task-B")!(output("task-B"));
     await until(() => !!document.querySelector("pre")?.textContent?.includes("task-B"), "B output is missing");
     select("C");
-    assert(!document.querySelector(".background-tasks-bar"), "an empty session must not show other sessions' tasks");
+    assert(!document.querySelector(".dock"), "an empty session must not show other sessions' tasks");
     select(undefined);
-    assert(!document.querySelector(".background-tasks-bar"), "home without a session must not show tasks");
+    assert(!document.querySelector(".dock"), "home without a session must not show tasks");
     select("A");
     assert(row(0).textContent?.includes("alpha.js"), "returning to A must restore A's running task");
     assert(tasks.every((task) => task.state === "running") && stopRequests.length === 0,
@@ -201,7 +217,7 @@ async function probe() {
     assert(stopRequests.every((id) => id === "task-A"), "Stop must address A's task ID");
     assert(tasks.find((task) => task.id === "task-B")?.state === "running", "stopping A must preserve B");
     select("B");
-    assert(document.querySelectorAll(".background-task").length === 1 && row(0).dataset.state === "running",
+    assert(document.querySelectorAll(".task-row").length === 1 && row(0).dataset.state === "running",
       "B's task must remain running after A stops");
   });
 
@@ -218,7 +234,7 @@ async function probe() {
       select("C");
       now += 20_000;
       select("A");
-      assert(!document.querySelector(".background-tasks-bar"), "expired A history reappeared after polling stopped");
+      assert(!document.querySelector(".task-row"), "expired A history reappeared after polling stopped");
     } finally {
       Date.now = originalNow;
     }
@@ -226,21 +242,22 @@ async function probe() {
 
   await check("ten tasks scroll without displacing Todo, Ask, or input", async () => {
     await mount();
-    const bar = document.querySelector<HTMLElement>(".background-tasks-bar")!;
+    const dock = document.querySelector<HTMLElement>(".dock")!;
+    const bar = document.querySelector<HTMLElement>(".task-list")!.closest<HTMLElement>(".dock-panel")!;
     const box = bar.getBoundingClientRect();
     assert(box.height >= 40, `task list must be visible (${box.height}px)`);
     assert(box.height <= 220, `task list is unbounded (${box.height}px)`);
     assert(bar.scrollHeight > bar.clientHeight, "overflowing rows need an internal scrollport");
     assert(getComputedStyle(bar).overflowY === "auto", "task list must be scrollable");
-    const todo = document.querySelector(".todo-dock")!.getBoundingClientRect();
+    const header = dock.querySelector(".dock-header")!.getBoundingClientRect();
     const ask = document.querySelector(".asktool-card")!.getBoundingClientRect();
     const input = document.querySelector("textarea")!.getBoundingClientRect();
-    assert(todo.top >= 0 && todo.bottom <= box.top + 1, "Todo must remain above the task list");
+    assert(header.top >= 0 && header.bottom <= box.top + 1, "shared Todo/task header must remain above the list");
     assert(box.bottom <= ask.top + 1 && ask.bottom <= input.top + 1, "Ask must remain above the input");
     assert(input.bottom <= innerHeight && input.width > 100, "input must remain usable");
     row(9).scrollIntoView({ block: "nearest" });
     click(9);
-    await until(() => !!document.querySelector(".background-task-output")?.textContent?.includes("task-9"), "last task output is unreachable");
+    await until(() => !!document.querySelector(".task-output")?.textContent?.includes("task-9"), "last task output is unreachable");
   });
 
   await check("only the selected log refreshes and remains bounded", async () => {

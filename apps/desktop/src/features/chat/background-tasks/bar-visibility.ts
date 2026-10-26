@@ -88,7 +88,7 @@ export function observeTasks(
 }
 
 /**
- * Tasks owned by the selected session: running ones always, finished ones only
+ * Tasks the bar may render right now: running ones always, finished ones only
  * inside the grace window or while the user is reading their output
  * (`pinnedId`), and never ones the user closed.
  */
@@ -96,11 +96,9 @@ export function selectVisibleTasks(
   state: BarVisibility,
   tasks: readonly BackgroundTaskSummary[],
   now: number,
-  sessionId: string | null,
   pinnedId: string | null = null,
 ): BackgroundTaskSummary[] {
   return tasks.filter((task) => {
-    if (task.sessionId !== sessionId) return false;
     if (state.dismissed.has(task.id)) return false;
     if (task.state === "running") return true;
     // Reading the log of a finished command must not be interrupted by the
@@ -120,11 +118,10 @@ export function nextExpiryAt(
   state: BarVisibility,
   tasks: readonly BackgroundTaskSummary[],
   now: number,
-  sessionId: string | null,
   pinnedId: string | null = null,
 ): number | null {
   let earliest: number | null = null;
-  for (const task of selectVisibleTasks(state, tasks, now, sessionId, pinnedId)) {
+  for (const task of selectVisibleTasks(state, tasks, now, pinnedId)) {
     if (task.id === pinnedId) continue;
     const ended = state.endedAt.get(task.id);
     if (ended === undefined) continue;
@@ -134,10 +131,31 @@ export function nextExpiryAt(
   return earliest;
 }
 
-/** Hide one row from the bar. Runs nowhere near the process lifecycle. */
-export function dismissTask(state: BarVisibility, id: string): BarVisibility {
-  if (state.dismissed.has(id)) return state;
+/**
+ * Hide one row from the bar. Runs nowhere near the process lifecycle.
+ *
+ * Removal is a view action, so it must never make a live task unreachable: a
+ * running task (including one already sent a stop signal, which is still
+ * `running` until the supervisor settles it) refuses removal here rather than
+ * relying on the caller not to render the control. `null` means the task is not
+ * in the current snapshot — nothing to remove, nothing to leak.
+ *
+ * Returns the previous state when the request is refused or already applied, so
+ * a stale snapshot cannot slip past the check.
+ */
+export function dismissTask(
+  state: BarVisibility,
+  task: Pick<BackgroundTaskSummary, "id" | "state"> | null,
+): BarVisibility {
+  if (!task) return state;
+  if (task.state === "running") return state;
+  if (state.dismissed.has(task.id)) return state;
   const dismissed = new Set(state.dismissed);
-  dismissed.add(id);
+  dismissed.add(task.id);
   return { ...state, dismissed };
+}
+
+/** Whether the row may offer removal; the same rule `dismissTask` enforces. */
+export function canDismiss(state: BarVisibility, task: Pick<BackgroundTaskSummary, "id" | "state">): boolean {
+  return task.state !== "running" && !state.dismissed.has(task.id);
 }

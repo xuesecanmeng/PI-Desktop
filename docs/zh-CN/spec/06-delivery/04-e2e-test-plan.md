@@ -489,7 +489,7 @@ task-candidate E2E 从请求工作树运行，但使用主工作区已经准备�
 
 - **前提条件**：已配置一个 Base URL 不含 `deepseek.com` 的 OpenAI 兼容提供商，模型 ID 属于 DeepSeek 系（例如硅基流动 `deepseek-ai/DeepSeek-V3.2`），并开启思考模式。
 - **步骤**：1) 在思考模式下开始会话。2) 完成若干回合，其中至少一条助手回复没有思考文本。3) 再发一条提示，使历史被回放到提供商。
-- **预期**：后续 Completions 请求的每条 assistant 消息都带推理字段。官方 `api.deepseek.com` 行对无思考内容的回合仍可使用 `""`。非官方 DeepSeek 系中转在可用时回传保留的真实思考，否则使用 ADR 0256 文档化的非空占位符——压缩后不得静默回填空串。请求不会携带通用 OpenAI 的 `reasoning_effort` 字段，因为 DeepSeek 端点不接受它；已选的思考模式仍按端点自身线路发送。不会仅因模型 ID 含 `"deepseek"` 就把 `thinkingFormat` 改成 `"deepseek"`。官方 `api.deepseek.com` 行仍使用 pi-ai 按 URL 检测的 DeepSeek `thinkingFormat`。
+- **预期**：后续 Completions 请求的每条 assistant 消息都带推理字段。官方 `api.deepseek.com` 行对无思考内容的回合仍可使用 `""`。非官方 DeepSeek 系中转在可用时回传保留的真实思考，否则使用 ADR 0256 文档化的非空占位符——压缩后不得静默回填空串。中转请求不携带通用 OpenAI 的 `reasoning_effort` 字段，因为有中转被报告拒绝它（#1664）；官方 `api.deepseek.com` 请求同时发送 `thinking: {type: "enabled"}` 与所选的 `reasoning_effort`（#1821）。不会仅因模型 ID 含 `"deepseek"` 就把 `thinkingFormat` 改成 `"deepseek"`。官方 `api.deepseek.com` 行仍使用 pi-ai 按 URL 检测的 DeepSeek `thinkingFormat`。
 - **链接规格**：`03-runtime/11-provider-model-system.md`、
   `03-runtime/12-provider-config-schema.md`
 - **验收**：B（提供商 Completions 兼容）
@@ -849,6 +849,16 @@ task-candidate E2E 从请求工作树运行，但使用主工作区已经准备�
   `reentered` 即使最终文字与提交值相同，成功后仍显示 `/compact`；未编辑的提交草稿则正常清空。
 - **覆盖**：`scripts/e2e/composer-submission.tsx`，由
   `pnpm test:e2e:composer-paste` 执行；真实桌面录屏使用隔离数据，以及响应时间受控的本地模型。
+
+#### E2E-011c-2：迟到的发送失败不会恢复旧草稿
+
+- **前提条件**：会话 A 处于空闲状态；可分别暂停并结算该输入框的两次发送结果。
+- **步骤**：提交草稿 N，在 N 结算前再提交 N+1。先接受 N+1，再拒绝 N。然后保持 N 未结算，重复测试并拒绝 N+1。
+- **预期**：N 的迟到失败不会把 N 的文本或文件引用恢复到 N+1 上。如果 N+1 被拒绝，只恢复 N+1 自己的快照。
+- **关联规范**：`04-ux/09-interaction-patterns.md`（按会话保存的草稿）
+- **验收**：C（输入框和会话隔离）
+- **里程碑**：M2
+- **状态**：异步所有权行为由 `apps/desktop/test/composer-submit-race.test.mjs` 覆盖；完整 UI 场景仍为草稿
 
 #### E2E-SESSION-reference-conversation-link：粘贴的会话链接把那段对话带进本轮
 
@@ -2771,11 +2781,14 @@ Markdown 源码，不是 `text/html` 负载；对禁用行内 HTML 的外部编�
 
 #### E2E-060d：助理元芯片、紧凑上下文摘要和重试操作
 
-- **前提**：完整的辅助消息包含 modelId 和 token 用法；另一条已完成的
-  助理消息有内容但没有用量。所选模型发布了 1m 级上下文窗口，但 provider
-  binding 仍含有历史 128k 通用种子。
+- **前提**：一个已完成的视觉回合在多条助手消息中包含 modelId 和 token
+  用量；另一条已完成的助理消息有内容但没有用量。所选模型发布了 1m 级
+  上下文窗口，但 provider binding 仍含有历史 128k 通用种子。
 - **步骤**：1) 打开会话。2) 确认已完成回合答案下方只有模型徽章、没有
-  上下文检查器。3) 将鼠标悬停在输入框工具栏的检查器触发器上，确认面板
+  上下文检查器。确认回合用量胶囊紧跟模型徽章，显示平均速度和紧凑总量；
+  悬停或用键盘聚焦胶囊，检查缓存读取/输入/输出精确数值、回合合计，以及
+  仅在非零时出现的缓存写入。将鼠标移入浮层确认其保持打开，然后用 Escape
+  和外部指针按下关闭。3) 将鼠标悬停在输入框工具栏的检查器触发器上，确认面板
   不会打开，然后点击它。4) 检查剩余令牌 + 百分比标题、已用/窗口计数、
   无卡片的本轮/速度数值、内联模型用量摘要和聚合工具摘要，确认标题下
   没有双线、弹层内部没有分隔线。5) 面板打开时滚动记录、调整窗口大小。
@@ -2784,15 +2797,21 @@ Markdown 源码，不是 `text/html` 负载；对禁用行内 HTML 的外部编�
   会话面板内：完全可见、不进入面板列，且在较窄面板上收窄而不是被裁剪。
   8) 空闲时点击该回合的重试。9) 确认没有用量的会话仍提供重试但不显示
   输入框检查器。
-- **预期**：有模型 id 时答案下方显示模型徽章。有用量后，紧凑上下文
-  检查器出现在输入框右侧工具栏、模型选择器左侧，并始终对应最新一条
-  已报告用量的助手回合。触发器显示圆环和剩余容量百分比（无 Context
+- **预期**：有模型 id 时答案下方显示模型徽章；该回合有用量时，回合用量
+  胶囊紧跟其后。胶囊速度等于总输出令牌除以总响应时长，合计为视觉回合内
+  输入/输出/缓存读取/缓存写入之和，推理令牌计入输出，子代理开销不计入。
+  浮层在指针停留其上时保持打开，并在指针离开的宽限后（触发器仍保持键盘焦点
+  时除外）、Escape 或外部按下时关闭；浮层传送到 body、限制在会话面板内，
+  流式回合不显示胶囊。有用量后，
+  紧凑上下文检查器出现在输入框右侧工具栏、模型选择器左侧，并始终对应最新
+  一条已报告用量的助手回合。触发器显示圆环和剩余容量百分比（无 Context
   文字）以及低容量 warning/error 状态，点击或键盘激活打开同一摘要，
   而单纯悬停不会打开或关闭。摘要保留精确的提供商数值，并用 `~` 标识
   估算的工具合计；默认不渲染逐工具列表、来源徽章、进度条、解释性估算
   段落或内部分隔线。占用、本轮合计和模型缓存/输入/输出/推理/命中率取
   最后一条已报告用量的助手消息，而不是工具循环加总，因此缓存读取与
-  上下文窗口同量级。没有缓存读取元数据时省略缓存命中率而不是推算。
+  上下文窗口同量级；这个最后一次请求的值与胶囊的视觉回合合计刻意不同。
+  没有缓存读取元数据时省略缓存命中率而不是推算。
   发布的 1m 级窗口（例如 `gpt-5.6-luna` 的 1,050,000 tokens）显示为
   实际窗口而不是 128k，且与 agent runtime 使用同一个 effective window；
   非默认 Advanced 覆盖仍然生效。生成速度只代表已完成回合。重试重新
@@ -5845,7 +5864,7 @@ eleven-tool-round desktop paths are verified by
 | A — 应用程序启动 | E2E-001、E2E-002、E2E-003、E2E-004、E2E-067、E2E-076、E2E-079、E2E-092、E2E-097、E2E-143、E2E-150、E2E-168、E2E-204、E2E-217 |
 | B——模型配置 | E2E-005、E2E-005G、E2E-006、E2E-007、E2E-038、E2E-050、E2E-052、E2E-055、E2E-066、E2E-080、E2E-082、E2E-151、E2E-005J、E2E-199、E2E-201、E2E-202、E2E-203、E2E-209、E2E-166 |
 | C — 对话和直播 | E2E-CHAT-running-status-survives-output-pauses、E2E-008、E2E-008d、E2E-008a、E2E-009、E2E-010、E2E-011、E2E-011a、E2E-011b、E2E-031、E2E-040、E2E-047、E2E-048、E2E-048c、E2E-048A、E2E-049、E2E-052、 E2E-053、E2E-054、E2E-055、E2E-059、E2E-059a、E2E-060c、E2E-060d、E2E-061、E2E-061a、E2E-062、E2E-064、E2E-065、E2E-068、E2E-071、 E2E-073、E2E-074、E2E-075、E2E-081、E2E-083、E2E-084、E2E-086、E2E-087、E2E-088、E2E-088b、E2E-089、E2E-090、E2E-094、E2E-095、E2E-096、 E2E-097、E2E-098、E2E-099、E2E-102、E2E-102a、E2E-102b、E2E-106、E2E-109、E2E-111、E2E-114、E2E-116、E2E-117、E2E-118、E2E-119、 E2E-120、E2E-121、E2E-代理-001、E2E-142、E2E-144、E2E-145、E2E-146、E2E-147、E2E-151、E2E-199、E2E-250、E2E-166、E2E-SUBAGENT-resume-a-settled-delegation |
-| C — 对话和直播（输入框草稿） | E2E-011c、E2E-011c-1 |
+| C — 对话和直播（输入框草稿） | E2E-011c、E2E-011c-1、E2E-011c-2 |
 | A / C / F / Quality — Tray session navigation | E2E-TRAY-bounded-session-navigation |
 | D——工作区 | E2E-012、E2E-013、E2E-022B、E2E-024I、E2E-047、E2E-049、E2E-057、E2E-058、E2E-060、E2E-068、E2E-075、E2E-078、E2E-153 |
 | D——工作区（项目排序） | E2E-253 |
@@ -9303,12 +9322,8 @@ Follow the [current S3 acceptance scenario](/spec/06-delivery/04-e2e-test-plan#e
   思考和最终回答；`Show thinking` 偏好开启与关闭两种状态；`过程显示` 偏好分别为
   「平铺显示」「命令工具优先」「全折叠显示」；重启后保留已保存的设置；旧版消息级
   转录搜索目标。
-- **步骤：** In every display mode, open and focus a child tool while the turn is
-  active. Complete the turn: the outer process closes, focus moves to its visible
-  header, and the final answer stays visible without claiming a manual scroll
-  anchor. Reopen it: the nested tool choice returns and later updates keep the
-  process open. Repeat without interaction and after closing and reopening the
-  process while running. 另一个回合中，明确展开已完成组，并确认后续更新仍保留
+- **步骤：** 确认活动组默认展开，让同一回合在无人操作时完成，并确认过程收起，只剩最终
+  回答（以及错误或待处理操作面）。另一个回合中，明确展开已完成组，并确认后续更新仍保留
   该选择；随后收起回合披露并确认组随之收起，再重新展开并确认组选择恢复。在「全折叠显示」
   中，确认命令行留在所属活动组内，且只有普通助手进度文字会拆分活动组。在「命令工具优先」
   中，确认 `Bash`／run 行作为组旁的独立行渲染，普通助手进度消息或命令会结束当前组，
@@ -9319,15 +9334,14 @@ Follow the [current S3 acceptance scenario](/spec/06-delivery/04-e2e-test-plan#e
   指示器，不使用转圈、脉冲圆点或逐字符动画，减少动态效果时保持静态；重新打开后确认
   已完成的推理行恢复。分别选择每个 `过程显示` 值并重启，确认设置保留；移除已保存的值，
   确认默认使用「全折叠显示」。确认标题分别显示执行中、已完成、已停止或失败，执行期间
-  压缩上下文与恢复会各自命名，未记录时长时不显示时长，且绝不回显当前命令。检查嵌套路径，
+  压缩上下文与恢复会各自命名，未记录时长时不显示时长，且绝不回显当前命令。确认顶层标题
+  只显示状态、已记录的耗时与直接工具／搜索数；折叠指示紧跟工具数；标题行下方有一条细线；
+  悬停只改变文字颜色、不绘制背景；失败回合不追加问题计数。检查嵌套路径，
   包括相互独立的组／条目切换、父级收起与恢复、单项片段、字面最后一项选择、失败／被拒／
   恢复、保留窗格重新挂载、命令行详情在打开前保持收起，以及旧版搜索定位。
 - **预期：** 一个回合只渲染一个过程披露，包含全部回答前的行，最终回答、助手错误、中止后
   的末尾文字和待处理操作留在披露之外；没有最终回答文字时，过程标题和这些错误或待处理
-  操作面仍然保留。
-  The outer process closes at completion even after live interaction; later manual
-  expansion survives updates and restores nested choices.
-  「平铺显示」中没有嵌套活动组，活动工具、
+  操作面仍然保留。未被操作的披露在完成时收起。「平铺显示」中没有嵌套活动组，活动工具、
   命令、思考和进度行按转录顺序排列，工具详情保持收起。「命令工具优先」中，`Bash`／run 行
   作为组旁的独立行，相邻调用保持分离，普通助手进度消息或命令会结束当前组，因此中间进度
   段落和每条命令都会开启新组。「全折叠显示」（默认）中，命令行留在所属组内，只有普通
@@ -9337,13 +9351,13 @@ Follow the [current S3 acceptance scenario](/spec/06-delivery/04-e2e-test-plan#e
   展开，完成后收起。用户明确选择的状态继续保留，并在外层披露重新展开时恢复；这些组默认值
   不依赖 `Show thinking` 偏好。回合标题按执行中、已完成、已停止、失败的顺序报告，失败与
   停止优先于正常完成，当前步骤为推理时显示 `Thinking`，执行期间压缩上下文和恢复会各自
-  命名，未记录时长时不显示时长，且绝不回显当前命令。嵌套组标题与命令行共用回合标题的
-  左边缘。`Show thinking` 关闭时，不再渲染任何已完成的推理行，仅在推理流式输出期间保留
+  命名，未记录时长时不显示时长，且绝不回显当前命令。标题只包含状态、耗时与直接工具／
+  搜索数，折叠指示紧跟工具数，标题行下方有细线，悬停只改变文字颜色、不绘制背景，且不
+  显示问题计数。嵌套组标题与命令行共用回合标题的左边缘。`Show thinking` 关闭时，不再
+  渲染任何已完成的推理行，仅在推理流式输出期间保留
   整段运行的 TextShimmer `Thinking` 指示器；重新打开时恢复。除显示模式的思考默认值外，
   没有任何条目载荷会自动展开：工具／搜索行在用户打开之前保持收起。父级、子级和同级状态
-  相互独立。
-  Turn completion resets only the outer process; other pane-owned choices survive
-  updates, preference changes and remounts. Renderer restart reapplies defaults.
+  相互独立；窗格拥有的用户选择跨更新、偏好切换和重新挂载保留，渲染器重启后重新应用默认值。
   搜索只展开拥有目标消息的回合过程，以及存在时的活动组，每个请求应用一次；条目级精确定位
   不在本次范围内，被偏好隐藏的推理会保持隐藏，直到用户打开 `Show thinking`。已保存的
   `transcriptDisplayMode` 跨重启保留，缺失或未知值解析为「全折叠显示」；已保存的
@@ -9355,7 +9369,10 @@ Follow the [current S3 acceptance scenario](/spec/06-delivery/04-e2e-test-plan#e
   以及运行中到完成时的过程披露行为；`pnpm test:e2e:transcript-disclosure` 验证手动
   展开状态保留和视口锚定；`apps/desktop/test/turn-process.test.mjs` 覆盖模式分段，
   `apps/desktop/test/transcript-display-modes-ui.test.mjs` 覆盖渲染层模式接线、
-  思考默认值与 TextShimmer，`apps/desktop/test/transcript-display-mode-settings.test.mjs`
+  思考默认值与 TextShimmer，`apps/desktop/test/turn-process-header.test.mjs` 覆盖
+  顶层标题的状态／耗时／工具数组合及不显示问题计数，
+  `apps/desktop/test/turn-process-header-style.test.mjs` 覆盖整行细线与仅文字变色的
+  悬停，`apps/desktop/test/transcript-display-mode-settings.test.mjs`
   覆盖设置行与搜索索引，`apps/desktop/test/settings-roundtrip.test.mjs` 覆盖规范化、
   写入校验与全折叠默认值。
 - **规格：** 04-ux/06-settings-ia、04-ux/08-component-spec、
@@ -9965,3 +9982,21 @@ host-created files. The full app's file-preview viewer is covered separately.
 - **关联规格**：`04-ux/01-ui-ia.md` §3.2、`04-ux/06-settings-ia.md`（常规 → 侧边栏卡片）。
 - **验收**：项目折叠时仍能回答“这里是否有正在运行的工作”，且两种提示可从持久化设置独立控制。
 - **状态**：草稿。现有 `apps/desktop/test/sidebar-project-runs.test.mjs` 覆盖数量分类、总开关与子开关门控、两种渲染入口，以及主题令牌和减少动态效果保证；它不覆盖设置 API 缺省值规范化或完整交互，相关场景仍需在可用环境手动验证。
+
+#### E2E-PROVIDER-reasoning-effort-override: Preserve an explicit gateway reasoning parameter
+
+- **Setup:** A custom Chat Completions provider with a DeepSeek-family model;
+  start with a legacy binding that omits `supportsReasoningEffort`.
+- **Steps:** In English, Chinese and German at 850/1000/1400px widths, open model settings, confirm Auto, select
+  Send, save and reopen; repeat for Do not send and Auto. Switch to Responses
+  and Anthropic and confirm the Completions-only control is hidden.
+- **Expected:** Each saved binding retains true, false, or null respectively.
+  With High selected, the real Completions adapter sends `reasoning_effort: high`
+  only when enabled; Auto keeps the existing DeepSeek compatibility default.
+  Responses continues using its own reasoning contract. Provider creation,
+  update/read, copying, and sync preserve the explicit override.
+- **Automation:** `node scripts/e2e-provider-api-style.mjs --reasoning-effort` exercises real
+  React/Chromium controls and captures the Host API payload (the IPC boundary is
+  stubbed). Rust provider tests independently verify real SQLite persistence;
+  `provider-reasoning-effort.test.ts` captures requests from the real pi-ai
+  adapter with fixture SSE responses. No live gateway credentials are required.

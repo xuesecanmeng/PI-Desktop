@@ -300,7 +300,8 @@
   挂载更长寿，因此切换会话、空首页 ↔ 停靠、聊天 ↔ 其他页面、或操作系统窗口时，
   都会保存/恢复来源文本和文件引用。未缓存的目标从空开始，首页输入框有自己的
   草稿槽位。创建新会话不会复制其他槽位。完成的发送只清除提交该请求的会话草稿，
-  即使请求进行中用户切换了会话；已删除的会话不能保留草稿。
+  即使请求进行中用户切换了会话；已删除的会话不能保留草稿。提交被拒绝时，只有该草稿槽位
+  仍由这次提交拥有才恢复捕获的文本和文件引用；较早提交的迟到失败不能覆盖较新的输入。
 - 每个工具调用都会从原始持久性解析 `workspaceRoot`
   会话，而不是来自当前选定的项目选项卡。后台完成
   刷新匹配行而不重定向活动对话。
@@ -704,9 +705,6 @@
   中间进度文字以及该回合的 `Bash`／run 行；末尾回答、助手错误和中止后的末尾文字留在
   披露之外。`过程显示`模式选择布局：`flat` 没有嵌套组，`command-first` 将命令提升为
   独立行，`fully-folded`（默认）让命令留在所属组内。
-  When the turn ends, the outer process closes even after live interaction. Focus
-  inside moves to its visible header without claiming a manual scroll anchor;
-  the user can reopen it afterward, and later updates preserve that choice.
 - 连续活动片段仅在当前思考偏好下至少有两个可见项时获得组披露，且只出现在
   `command-first` 或 `fully-folded` 中。`fully-folded` 由普通助手进度文字结束片段；
   `command-first` 由普通助手进度消息或命令结束片段。单项活动直接使用自身披露，被隐藏的
@@ -730,11 +728,9 @@
   `Thinking` 指示器；已存推理仍会保留，重新打开偏好时重新出现。
 - 激活组或条目标题只切换该层级。收起父级会保留子级状态，重新展开时恢复，
   同级组彼此独立；展开父级不是“全部展开”。
-- A manual item action claims its containing group without toggling it. Streaming
-  and completion preserve nested choices, including opened, focused or selected
-  content. Turn completion resets only the outer process to closed, retaining
-  descendants for later inspection. Choices survive preference changes,
-  singleton-to-group growth and remounts while the retained session pane lives.
+- 手动操作条目会把所属组标记为用户接管，但不会切换该组。流式更新和完成不会
+  重新打开手动收起，也不会收起包含用户已展开、聚焦或选中内容的容器。只要保留会话
+  窗格仍存在，选择就跨偏好切换、单项变组和重新挂载保留。
 - 搜索和导航只打开拥有目标消息的回合过程与活动组，每个显示请求仅应用一次；条目级精确定位不在本次范围内。被偏好隐藏的推理会保持隐藏，直到用户打开 `Show thinking`；关闭搜索不会收起已显示路径。
 - 待处理权限、提问、计划／目标审批及其他操作卡位于隐藏过程之外，始终可达。
 - 每个披露使用独立按钮、`aria-expanded` 和 `aria-controls`；收起的后代离开 Tab 与

@@ -70,16 +70,14 @@ export function createTranscriptReadingRuntime({ get, set }: StoreAccess, read: 
       if (signal.aborted || get().activeSessionId !== sessionId || !position.messageId) return false;
       const previous = get().transcriptViews[sessionId];
       const range = currentView(sessionId);
+      // A user navigation already in flight always wins over automatic restore.
+      if (range.focus || range.loading) return false;
       if (range.messages.some((message) => message.id === position.messageId)) {
-        // A warm selection already owns a continuous range through the latest
-        // tail. Retain it across latest-page revalidation instead of replacing
-        // it with a smaller around page. Ordinary projection keeps live rows
-        // authoritative and does not enter historical/search mode.
+        // A warm cache already reaches the live tail; preserve it without
+        // entering historical mode and hiding live status or permissions.
         if (!previous && get().selectingSessionId === sessionId) publish(sessionId, range);
         return true;
       }
-      // A user navigation already in flight always wins over automatic restore.
-      if (range.focus || range.loading) return false;
       const pending: TranscriptView = { ...range, restored: true, loading: "target" };
       const rollback = () => {
         if (get().transcriptViews[sessionId] !== pending) return;
