@@ -187,6 +187,7 @@ export function TaskDock({ sessionId }: { sessionId: string }) {
           {hasTasks ? (
             <TaskPanel
               listId={`${panelId}-tasks`}
+              interactive={!collapsed && tab === "tasks"}
               tasks={tasks}
               expandedId={expandedId}
               output={output}
@@ -209,6 +210,7 @@ export function TaskDock({ sessionId }: { sessionId: string }) {
  */
 function TaskPanel({
   listId,
+  interactive,
   tasks,
   expandedId,
   output,
@@ -218,6 +220,7 @@ function TaskPanel({
   onRemove,
 }: {
   listId: string;
+  interactive: boolean;
   tasks: readonly BackgroundTaskSummary[];
   expandedId: string | null;
   output: BackgroundTaskOutput | null;
@@ -228,7 +231,7 @@ function TaskPanel({
 }) {
   const { t } = useTranslation();
   return (
-    <div id={listId} className="dock-panel" role="tabpanel" aria-labelledby={`${listId}-tab`}>
+    <div id={listId} className="dock-panel" role="tabpanel" aria-labelledby={`${listId}-tab`} hidden={!interactive}>
       <div className="task-list">
         {tasks.map((task) => {
           const running = task.state === "running";

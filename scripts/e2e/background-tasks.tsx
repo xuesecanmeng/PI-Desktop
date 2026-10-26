@@ -113,12 +113,14 @@ async function mount(count = 10) {
   ));
   await until(() => document.querySelectorAll(".task-row").length === count, "tasks did not render");
   const tasksTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-    .find((tab) => tab.textContent?.includes("Tasks"));
+    .find((tab) => tab.textContent?.trim() === i18n.t("taskDock.tabTasks"));
   flushSync(() => tasksTab?.click());
   const disclosure = document.querySelector<HTMLButtonElement>(".dock-toggle")!;
   if (disclosure.getAttribute("aria-expanded") === "false") flushSync(() => disclosure.click());
   await until(() => document.querySelector<HTMLElement>(".task-list")!.getBoundingClientRect().height > 0,
     "task panel did not expand");
+  await until(() => !document.querySelector(".dock-content")!.getAnimations()
+    .some((animation) => animation.playState === "running"), "task dock transition did not settle");
 }
 
 function FixtureTaskDock() {
@@ -154,8 +156,10 @@ async function probe() {
   };
   window.addEventListener("unhandledrejection", onUnhandled);
   const check = async (name: string, run: () => Promise<void>) => {
+    const started = performance.now();
     try { await run(); results.push({ name, ok: true }); }
     catch (error) { results.push({ name, ok: false, error: String(error) }); }
+    console.log("BACKGROUND_TASK_CASE " + JSON.stringify({ ...results.at(-1), durationMs: Math.round(performance.now() - started) }));
   };
 
   const select = (sessionId: string | undefined) => {
@@ -196,6 +200,8 @@ async function probe() {
     select(undefined);
     assert(!document.querySelector(".dock"), "home without a session must not show tasks");
     select("A");
+    await until(() => !!document.querySelector(".task-command")?.textContent?.includes("alpha.js"),
+      "returning to A must reload its own task snapshot");
     assert(row(0).textContent?.includes("alpha.js"), "returning to A must restore A's running task");
     assert(tasks.every((task) => task.state === "running") && stopRequests.length === 0,
       "session navigation must never stop a background process");
@@ -238,6 +244,21 @@ async function probe() {
     } finally {
       Date.now = originalNow;
     }
+  });
+
+  await check("Todo and Tasks tabs show one panel and share collapse across sessions", async () => {
+    await mount();
+    const taskPanel = document.querySelector<HTMLElement>(".task-list")!.closest<HTMLElement>(".dock-panel")!;
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const todoTab = tabs.find((tab) => tab.textContent?.trim() === i18n.t("taskDock.tabTodo"))!;
+    assert(!taskPanel.hidden, "Tasks tab must expose task controls");
+    flushSync(() => todoTab.click());
+    assert(taskPanel.hidden, "Todo tab must hide task controls from display and keyboard navigation");
+    flushSync(() => document.querySelector<HTMLButtonElement>(".dock-toggle")!.click());
+    select("B");
+    select("fixture");
+    assert(document.querySelector(".dock-toggle")?.getAttribute("aria-expanded") === "false",
+      "switching sessions must preserve the shared collapse choice");
   });
 
   await check("ten tasks scroll without displacing Todo, Ask, or input", async () => {

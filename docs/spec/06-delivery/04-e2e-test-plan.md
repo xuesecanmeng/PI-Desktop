@@ -8,6 +8,18 @@
 
 ## 1. Goals
 
+### E2E-INTEGRATION-0210-session-task-dock
+
+- **Steps:** Switch A-B-A with delayed output and a failed Stop, retry from A,
+  revisit after terminal-row expiry, switch Todo/Tasks, and collapse across
+  sessions. Repeat at desktop and narrow widths with ten tasks and bounded logs.
+- **Expected:** Output/errors stay with their owner; only the selected log is
+  read; inactive panels leave display and keyboard navigation; collapse is
+  shared; task rows remain reachable without displacing Ask or the input.
+- **Coverage:** `node scripts/e2e-background-tasks.mjs` runs real React/Chromium
+  with fixture IPC. Its `--baseline v0.21.0` comparison demonstrates the retained
+  error/expiry protections and inactive-panel regression.
+
 ### E2E-UPDATE-develop-build-pinning
 
 - **Preconditions:** A packaged develop manifest with `piUpdatesDisabled: true`,

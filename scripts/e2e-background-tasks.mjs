@@ -88,9 +88,12 @@ const child = spawn(electronBinary, [join(artifacts, "main.cjs")], {
   env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
 });
 let output = "";
-for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => { output += chunk; });
-// Three viewports now include session switches, late replies and idle expiry.
-const timer = setTimeout(() => child.kill("SIGKILL"), 150_000);
+for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => {
+  output += chunk;
+  if (chunk.toString().includes("BACKGROUND_TASK_CASE")) process.stdout.write(chunk);
+});
+// Hidden Windows frames pace transitions slowly across all three viewports.
+const timer = setTimeout(() => child.kill("SIGKILL"), 240_000);
 let code;
 try {
   code = await new Promise((resolve, reject) => {
