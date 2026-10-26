@@ -8,6 +8,22 @@
 
 ## 1. Goals
 
+### E2E-UPDATE-develop-build-pinning
+
+- **Preconditions:** A packaged develop manifest with `piUpdatesDisabled: true`,
+  existing automatic update settings, isolated updater/clock fixtures and no
+  real release requests.
+- **Steps:** Start the updater, advance one day, request a manual check, select
+  Automatic again, emit a downloaded-release event, and request download/install.
+- **Expected:** Update mode stays disabled on Windows, macOS and Linux; no feed
+  request, download or installer starts, and install-on-quit stays off. Settings
+  keeps its existing disabled presentation. Ordinary unmarked releases retain
+  their automatic/manual delivery behavior.
+- **Coverage:** `apps/desktop/test/develop-update-policy.test.mjs` exercises the
+  production controller against packaged metadata and external updater/clock
+  boundaries; existing updater-controller and preference suites cover unmarked
+  releases.
+
 ### E2E-FILE-opening-preferences-and-directories
 
 - **Preconditions:** Dedicated request worktree, current Main base, reused host

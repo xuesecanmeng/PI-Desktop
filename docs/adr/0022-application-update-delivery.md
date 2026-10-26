@@ -50,6 +50,13 @@ download-and-install flow.
 
 ## Consequences
 
+Develop packages stamp `piUpdatesDisabled: true` into their installed package
+metadata. Main treats this immutable build policy like an unpackaged development
+run: no feed checks, downloads or install-on-quit, even when existing settings
+request automatic updates. Renderer preferences cannot re-enable delivery.
+Updating such an installation requires explicitly installing a different build.
+Official builds without this marker keep the existing delivery policy.
+
 - Update state is process-owned and consistent across the application menu,
   Settings, and the ambient banner.
 - The sandboxed renderer cannot redirect update traffic or install arbitrary

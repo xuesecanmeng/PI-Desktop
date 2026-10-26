@@ -93,7 +93,8 @@
       }
     ],
     "extraMetadata": {
-      "piDistribution": "installed"
+      "piDistribution": "installed",
+      "piUpdatesDisabled": true
     },
     "files": [
       "out/**/*",

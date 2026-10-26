@@ -918,6 +918,10 @@ system while preserving their different data ownership:
   never accepts a renderer-supplied destination (D313 / ADR 0157)
 - Updates row with the current delivery state and one applicable action:
   Check for updates, View release, or Restart to update
+- Packaged develop builds carry `piUpdatesDisabled: true` in installed metadata.
+  Their Updates row reports disabled delivery and locks checks/preferences;
+  release notes remain available. Existing automatic settings cannot override
+  the build policy, and changing versions requires an explicit installation.
 - **Developer** card:
   - developer mode is off unless the optional persisted
     `AppSettings.developerMode` value is `true`

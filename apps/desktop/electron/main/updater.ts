@@ -11,7 +11,7 @@
  *    `PORTABLE_EXECUTABLE_FILE`) → notify + link. The
  *    NSIS installer must not replace a no-install run.
  *  - Linux deb (no $APPIMAGE in env) → notify + link.
- *  - Unpackaged dev runs → disabled (no app-update.yml in resources).
+ *  - Unpackaged runs and packaged develop builds → disabled.
  *
  * The installer download cache lives in the user cache directory rather than
  * beside the installation; `PI_DESKTOP_UPDATE_CACHE_DIR` relocates it, and
@@ -157,9 +157,9 @@ export class AppUpdaterController {
   private readonly autoUpdater: AppUpdater;
   private readonly cacheMaintenance: UpdateCacheMaintenance;
 
-  private readPackagedDistribution(
+  private readPackagedMetadata(
     isPackaged: boolean,
-  ): WindowsDistribution | undefined {
+  ): Record<string, unknown> | undefined {
     if (!isPackaged) return undefined;
     try {
       const packageJson = JSON.parse(
@@ -168,16 +168,12 @@ export class AppUpdaterController {
       if (typeof packageJson !== "object" || packageJson === null) {
         return undefined;
       }
-      const distribution = (packageJson as Record<string, unknown>)
-        .piDistribution;
-      return distribution === "installed" || distribution === "zip" || distribution === "portable"
-        ? distribution
-        : undefined;
+      return packageJson as Record<string, unknown>;
     } catch (error) {
       this.logger.app(
         "updater",
         "warn",
-        "packaged distribution metadata unavailable",
+        "packaged update metadata unavailable",
         { data: { detail: String(error) } },
       );
       return undefined;
@@ -189,11 +185,19 @@ export class AppUpdaterController {
     this.send = options.send;
     this.getLocale = options.getLocale ?? (() => "en");
     const platform = options.platform ?? process.platform;
-    const isPackaged = options.isPackaged ?? app.isPackaged;
+    const packaged = options.isPackaged ?? app.isPackaged;
+    const metadata = this.readPackagedMetadata(packaged);
+    // Build policy outranks preferences inherited from an official installation.
+    const isPackaged = packaged && metadata?.piUpdatesDisabled !== true;
+    const packagedDistribution = metadata?.piDistribution;
     const distribution =
       options.distribution ??
-      (platform === "win32"
-        ? this.readPackagedDistribution(isPackaged)
+      (platform === "win32" && (
+        packagedDistribution === "installed" ||
+        packagedDistribution === "zip" ||
+        packagedDistribution === "portable"
+      )
+        ? packagedDistribution
         : undefined);
     this.platform = platform;
     this.isPackaged = isPackaged;
@@ -247,6 +251,8 @@ export class AppUpdaterController {
       );
     }
     this.autoUpdater = options.autoUpdater ?? relocated ?? autoUpdater;
+    this.autoUpdater.autoDownload = false;
+    this.autoUpdater.autoInstallOnAppQuit = false;
     this.cacheMaintenance = new UpdateCacheMaintenance({
       resourcesPath: process.resourcesPath,
       activeBasePath,
