@@ -16,11 +16,13 @@ const workspace = join(scratch, "workspace");
 await mkdir(workspace);
 await writeFile(join(workspace, "a.txt"), "alpha-marker\n");
 await writeFile(join(workspace, "b.txt"), "beta-marker\n");
+await writeFile(join(workspace, ".env.test"), "env-fixture-marker\n");
 const calls = [
   { id: "read-a", name: "Read", arguments: { path: "a.txt" } },
   { id: "read-b", name: "Read", arguments: { path: "b.txt" } },
   { id: "glob", name: "Glob", arguments: { pattern: "*.txt" } },
   { id: "grep", name: "Grep", arguments: { pattern: "alpha-marker", path: "." } },
+  { id: "read-env", name: "Read", arguments: { path: ".env.test" } },
 ];
 const requests = [];
 const server = createServer(async (req, res) => {
@@ -93,6 +95,7 @@ try {
   assert.match(JSON.stringify(results[1].content), /beta-marker/);
   assert.match(JSON.stringify(results[2].content), /a\.txt/);
   assert.match(JSON.stringify(results[3].content), /alpha-marker/);
+  assert.match(JSON.stringify(results[4].content), /env-fixture-marker/);
   assert.equal(events.some(event => event.type === "error"), false);
   // Exercise the real delegate loop with the parent's scoped Host tool bridge.
   returnedReads.length = 0;

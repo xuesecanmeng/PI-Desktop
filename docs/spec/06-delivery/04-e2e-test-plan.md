@@ -15284,19 +15284,21 @@ are withdrawn with ADR 0165.
 
 #### E2E-234: Workspace security denylist and ignore layers
 
-- **Preconditions**: A project containing `.env`, `.env.example`,
+- **Preconditions**: A project containing `.env`, `.env.test`, `.env.example`,
   `server.pem`, `keys/id_rsa`, `notes.txt`, `node_modules/pkg/index.js`,
   `generated/out.txt`, `debug.log`, and a root `.pi-desktopignore` with
   `generated/`. Every file contains the word `needle`. The session is Agent
   in `auto` permission mode.
-- **Steps**: 1) Ask for `Read` of `.env`, then of `.env.example`. 2) Ask for
-  `Write` to `keys/id_rsa`. 3) Run an unscoped `Grep` and `Glob` for `needle`.
+- **Steps**: 1) Ask for `Read` of `.env`, `.env.test`, `.env.example`, and
+  `server.pem`. 2) Ask for `Write` to `keys/id_rsa` and `.env`. 3) Run an
+  unscoped `Grep` and `Glob` for `needle`.
   4) Run `Grep` with `path: node_modules/pkg` and with `path: generated`.
-  5) Repeat step 1 with a system `rg` installed and with
+  5) Repeat step 3 with a system `rg` installed and with
   `PI_DESKTOP_DISABLE_RG=1`.
-- **Expected**: Steps 1 and 2 fail with `WORKSPACE_PATH_DENIED`, the
-  `.env.example` read succeeds, and no `keys/id_rsa` file is created. The
-  unscoped search lists `notes.txt` and `.env.example` only: `.env`,
+- **Expected**: The `.env`, `.env.test`, and `.env.example` reads succeed;
+  the `server.pem` read and both writes fail with `WORKSPACE_PATH_DENIED`.
+  No `keys/id_rsa` file is created, and `.env` remains unchanged. The
+  unscoped search lists `notes.txt` and `.env.example` only: `.env`, `.env.test`,
   `server.pem`, `node_modules`, `generated`, and `debug.log` are absent. The
   explicit-path searches return one hit each. The in-process walker and the
   `rg` fast path produce the same file set.
@@ -15304,11 +15306,11 @@ are withdrawn with ADR 0165.
   `03-runtime/08-error-codes.md` §3.3, D032
 - **Acceptance**: B (workspace tools), Security
 - **Milestone**: M3+
-- **Status**: unit-covered by `crates/host-core/src/tools/mod.rs`
-  (`security_denylist_blocks_read_write_edit_and_hides_search_results`,
-  `default_ignores_and_workspace_ignore_file_hide_unscoped_walks_only`) and
-  `tools/ignore_rules.rs`; the Electron journey is documented and deferred by
-  the no-local-E2E policy
+- **Status**: unit-covered by `crates/host-core/src/tools/mod.rs` and
+  `tools/ignore_rules.rs`; `scripts/e2e-smoke.mjs` covers the explicit env
+  read and private-key denial through the host RPC, and
+  `scripts/e2e-parallel-read-batches.mjs` verifies that a local model fixture
+  receives the env read result through the agent runtime.
 
 #### E2E-235: Dangling symlinks cannot write outside the workspace
 

@@ -1499,7 +1499,7 @@ fn tool_read(
     let (resolved, root_kind) =
         resolve_tool_path_with_external(root, roots, path, allow_external_paths)
             .map_err(|e| (e.clone(), e))?;
-    if ignore_rules::is_sensitive_path(&resolved) {
+    if ignore_rules::is_sensitive_read_path(&resolved) {
         return Err(ignore_rules::denied_error(path));
     }
     let offset = args
@@ -4076,7 +4076,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn security_denylist_blocks_read_write_edit_and_hides_search_results() {
+    async fn reads_env_files_explicitly() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("nested")).unwrap();
+        for path in [".env", ".env.test", ".ENV.local", "nested/.env.production"] {
+            std::fs::write(dir.path().join(path), "SAMPLE_VALUE=example\n").unwrap();
+            let read = execute_tool(
+                Some(dir.path()),
+                None,
+                "Read",
+                &serde_json::json!({ "path": path }),
+                5_000,
+            )
+            .await;
+            assert!(read.ok, "{path}: {:?}", read.content);
+            assert!(read.content["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("SAMPLE_VALUE=example")));
+        }
+    }
+
+    #[tokio::test]
+    async fn security_denylist_protects_keys_writes_and_search_results() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(".env"), "SECRET_TOKEN=needle\n").unwrap();
         std::fs::write(dir.path().join(".env.example"), "SECRET_TOKEN=needle\n").unwrap();
@@ -4091,15 +4112,44 @@ mod tests {
             5_000,
         )
         .await;
-        assert!(!read.ok);
-        assert_eq!(read.error_code.as_deref(), Some("WORKSPACE_PATH_DENIED"));
+        assert!(read.ok, "explicit env read: {:?}", read.content);
 
-        // An explicit outside-path grant does not lift the denylist either.
+        let outside = tempfile::tempdir().unwrap();
+        let outside_env = outside.path().join(".env.test");
+        std::fs::write(&outside_env, "SAMPLE_VALUE=example\n").unwrap();
+        let outside_args = serde_json::json!({ "path": outside_env });
+        let denied_external =
+            execute_tool(Some(dir.path()), None, "Read", &outside_args, 5_000).await;
+        assert_eq!(
+            denied_external.error_code.as_deref(),
+            Some("PATH_OUTSIDE_WORKSPACE")
+        );
         let external = execute_tool_with_path_access(
             Some(dir.path()),
             None,
             "Read",
-            &serde_json::json!({ "path": ".env" }),
+            &outside_args,
+            ToolExecutionOptions {
+                timeout_ms: Some(5_000),
+                bash_options: None,
+                allow_external_paths: true,
+                hashline: None,
+                visualization_root: None,
+            },
+        )
+        .await;
+        assert!(
+            external.ok,
+            "approved external env read: {:?}",
+            external.content
+        );
+        let outside_key = outside.path().join("private.key");
+        std::fs::write(&outside_key, "fixture\n").unwrap();
+        let external_key = execute_tool_with_path_access(
+            Some(dir.path()),
+            None,
+            "Read",
+            &serde_json::json!({ "path": outside_key }),
             ToolExecutionOptions {
                 timeout_ms: Some(5_000),
                 bash_options: None,
@@ -4110,7 +4160,7 @@ mod tests {
         )
         .await;
         assert_eq!(
-            external.error_code.as_deref(),
+            external_key.error_code.as_deref(),
             Some("WORKSPACE_PATH_DENIED")
         );
 
@@ -4123,6 +4173,41 @@ mod tests {
         )
         .await;
         assert!(example.ok, "templates stay readable: {:?}", example.content);
+
+        let key_read = execute_tool(
+            Some(dir.path()),
+            None,
+            "Read",
+            &serde_json::json!({ "path": "server.pem" }),
+            5_000,
+        )
+        .await;
+        assert_eq!(
+            key_read.error_code.as_deref(),
+            Some("WORKSPACE_PATH_DENIED")
+        );
+
+        for (tool, args) in [
+            (
+                "Write",
+                serde_json::json!({ "path": ".env", "content": "changed" }),
+            ),
+            (
+                "Edit",
+                serde_json::json!({ "path": ".env", "old_string": "needle", "new_string": "changed" }),
+            ),
+        ] {
+            let result = execute_tool(Some(dir.path()), None, tool, &args, 5_000).await;
+            assert_eq!(
+                result.error_code.as_deref(),
+                Some("WORKSPACE_PATH_DENIED"),
+                "{tool}"
+            );
+        }
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(".env")).unwrap(),
+            "SECRET_TOKEN=needle\n"
+        );
 
         let write = execute_tool(
             Some(dir.path()),

@@ -32,18 +32,19 @@ Also deny inside workspace (and inside the scratch or an approved external
 root) for:
 - `.git/objects/**`
 - private key patterns: `*.pem`, `*.key`, `id_rsa`, `id_ed25519`
-- `.env`, `.env.*` — except the documentation variants `.env.example`,
-  `.env.sample`, and `.env.template`, which hold no secrets and are what a
-  coding task usually needs
-- credential files: `*.p12`, `*.pfx`, `credentials.json` (Google), `.npmrc` with tokens (best-effort)
+- credential files: `*.p12`, `*.pfx`, `credentials.json` (Google)
+
+`.env` and `.env.*` are allowed for explicit `Read` calls. They remain denied
+for `Write` and `Edit`, and are hidden from `Glob` and `Grep`, except for the
+documentation variants ending in `.example`, `.sample`, or `.template`. Other
+denylist rules still apply to explicit reads, including protected suffixes and
+`.git/objects/**`. Plugin filesystem access follows its own policy.
 
 File-name matching is case-insensitive. `Glob` and `Grep` drop matching files
 from their results silently; an explicit `Read`, `Write`, or `Edit` (including
-the `Edit` move destination) fails with `WORKSPACE_PATH_DENIED`, and an
-outside-path grant does not lift the denial. `Bash` is not filtered (§6).
-
-> Read may be allowed with an explicit permission prompt in a later revision;
-> MVP fails closed.
+the `Edit` move destination) of a path denied for that tool fails with
+`WORKSPACE_PATH_DENIED`, and an outside-path grant does not lift that denial.
+`Bash` is not filtered (§6). See ADR 0338 for the disclosure trade-off.
 
 ## 4. Default ignore (app)
 
@@ -83,7 +84,7 @@ Syntax: gitignore-compatible subset.
 |---|---|
 | Glob | unscoped walk: layers 1–4 filter results; explicit `path`: layer 1 only |
 | Grep | unscoped walk: layers 1–4 filter the file set (in-process walker and the system `rg` fast path alike); explicit `path`: layer 1 only |
-| Read | `WORKSPACE_PATH_DENIED` on a denylisted file; otherwise permission-gated when the explicit path is outside; `TOOL_DENIED` after denial |
+| Read | `.env` and `.env.*` are allowed unless another denylist rule applies; otherwise `WORKSPACE_PATH_DENIED` on a denylisted file; outside paths remain permission-gated |
 | Write/Edit | `WORKSPACE_PATH_DENIED` on a denylisted file or move destination; otherwise permission-gated when the explicit path is outside; `TOOL_DENIED` after denial |
 | Bash | path sandbox still enforced by host; ignore file does not expand bash powers |
 

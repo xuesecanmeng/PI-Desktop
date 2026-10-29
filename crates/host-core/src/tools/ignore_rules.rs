@@ -2,9 +2,9 @@
 //!
 //! Four layers, highest priority first:
 //!
-//! 1. Security denylist: private keys, `.env` files, and credential bundles
-//!    are never read, written, edited, or surfaced by a search, whichever
-//!    root the path resolved into. The denylist cannot be disabled.
+//! 1. Security denylist: private keys and credential bundles are protected
+//!    across tools. `.env` files may be explicitly read, but are protected
+//!    from writes and searches. The denylist cannot be disabled.
 //! 2. App defaults: build output and dependency trees are hidden from an
 //!    unscoped `Glob`/`Grep` walk. An explicit `path` argument opts back in,
 //!    the same way it already bypasses parent `.gitignore` rules.
@@ -59,14 +59,18 @@ pub const DENIED_CODE: &str = "WORKSPACE_PATH_DENIED";
 
 /// Whether a file name is on the always-on security denylist.
 pub fn is_sensitive_file_name(name: &str) -> bool {
+    is_sensitive_file_name_with_env(name, true)
+}
+
+fn is_sensitive_file_name_with_env(name: &str, deny_env: bool) -> bool {
     let lower = name.to_ascii_lowercase();
-    if lower.starts_with(".env.") {
+    if deny_env && lower.starts_with(".env.") {
         return !ENV_TEMPLATE_SUFFIXES
             .iter()
             .any(|suffix| lower.ends_with(suffix));
     }
     if SENSITIVE_FILE_NAMES.contains(&lower.as_str()) {
-        return true;
+        return deny_env || lower != ".env";
     }
     SENSITIVE_SUFFIXES
         .iter()
@@ -76,10 +80,19 @@ pub fn is_sensitive_file_name(name: &str) -> bool {
 /// Whether a resolved path is blocked by the security denylist: either its
 /// file name matches, or it lives under a `.git/objects` tree.
 pub fn is_sensitive_path(path: &Path) -> bool {
+    is_sensitive_path_with_env(path, true)
+}
+
+/// Whether a path is blocked for an explicit Read.
+pub fn is_sensitive_read_path(path: &Path) -> bool {
+    is_sensitive_path_with_env(path, false)
+}
+
+fn is_sensitive_path_with_env(path: &Path, deny_env: bool) -> bool {
     if path
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(is_sensitive_file_name)
+        .is_some_and(|name| is_sensitive_file_name_with_env(name, deny_env))
     {
         return true;
     }
@@ -98,7 +111,7 @@ pub fn is_sensitive_path(path: &Path) -> bool {
 pub fn denied_error(display: &str) -> (String, String) {
     (
         DENIED_CODE.into(),
-        format!("{display} is blocked by the workspace security denylist (private keys, .env files, and credential bundles are never exposed to tools)"),
+        format!("{display} is blocked by the workspace security denylist"),
     )
 }
 
@@ -248,6 +261,17 @@ mod tests {
         assert!(is_sensitive_path(Path::new("/ws/.git/objects/ab/cdef")));
         assert!(!is_sensitive_path(Path::new("/ws/.git/HEAD")));
         assert!(!is_sensitive_path(Path::new("/ws/src/objects/index.ts")));
+    }
+
+    #[test]
+    fn explicit_env_reads_keep_other_security_rules() {
+        for name in [".env", ".env.test", ".ENV.production"] {
+            assert!(!is_sensitive_read_path(Path::new(name)), "{name}");
+            assert!(is_sensitive_path(Path::new(name)), "{name}");
+        }
+        for path in ["private.key", ".env.private.key", ".git/objects/.env"] {
+            assert!(is_sensitive_read_path(Path::new(path)), "{path}");
+        }
     }
 
     #[test]

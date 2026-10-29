@@ -1,5 +1,7 @@
 # Unreleased changes
 
+- Allow explicit agent `Read` calls for `.env` and `.env.*` files. Their
+  contents may include credentials and become part of the model context.
 - Fixed duplicate `/、` when opening slash commands with a Chinese IME in an
   empty composer. Keep pre-edit text intact and apply the slash alias only
   after composition commits, preserving recovery from a missing end event.

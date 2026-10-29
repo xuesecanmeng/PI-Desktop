@@ -8327,6 +8327,9 @@ runner 会在运行时的隔离临时目录中生成六个插件形态 fixture�
 
 #### E2E-234：工作区安全拒绝名单与忽略层
 
+> This translated scenario predates ADR 0338; use E2E-234 in the
+> [English test plan](/spec/06-delivery/04-e2e-test-plan) for current behavior.
+
 - **前提条件**：一个项目包含 `.env`、`.env.example`、`server.pem`、`keys/id_rsa`、
   `notes.txt`、`node_modules/pkg/index.js`、`generated/out.txt`、`debug.log`，以及
   根目录下写有 `generated/` 的 `.pi-desktopignore`。每个文件都包含单词 `needle`。
