@@ -3,6 +3,8 @@ import {
   SESSION_THINKING_LEVELS,
   defaultCommandShellForPlatform,
   isCommandShellId,
+  normalizeRadialMenuPreferences,
+  radialMenuWriteError,
   validateNetworkProxy,
   validateSpeechSettings,
   type CommandShellId,
@@ -166,7 +168,7 @@ export function createProviderCatalogRuntime({
   ): T & { defaultCommandShell: CommandShellId } => {
     const value = (
       settings && typeof settings === "object" ? settings : {}
-    ) as T & { defaultCommandShell?: unknown; fileOpenTarget?: unknown };
+    ) as T & { defaultCommandShell?: unknown; fileOpenTarget?: unknown; radialMenu?: unknown };
     return {
       ...(value as T),
       fileOpenTarget: value.fileOpenTarget === "external" ? "external" : "workpanel",
@@ -181,6 +183,7 @@ export function createProviderCatalogRuntime({
         (value as T & { transcriptDisplayMode?: unknown }).transcriptDisplayMode === "fully-folded"
           ? (value as T & { transcriptDisplayMode?: unknown }).transcriptDisplayMode
           : "fully-folded",
+      radialMenu: normalizeRadialMenuPreferences(value.radialMenu),
       defaultCommandShell: isCommandShellId(value.defaultCommandShell)
         ? value.defaultCommandShell
         : defaultCommandShellForPlatform(process.platform),
@@ -202,6 +205,7 @@ export function createProviderCatalogRuntime({
       macosWindowTranslucency?: unknown;
       transcriptDisplayMode?: unknown;
       fileOpenTarget?: unknown;
+      radialMenu?: unknown;
     };
     if (Object.prototype.hasOwnProperty.call(value, "fileOpenTarget") &&
       value.fileOpenTarget !== "workpanel" && value.fileOpenTarget !== "external") {
@@ -254,6 +258,12 @@ export function createProviderCatalogRuntime({
       typeof value.macosWindowTranslucency !== "boolean"
     ) {
       throw Object.assign(new Error("macosWindowTranslucency is invalid"), {
+        errorCode: ErrorCodes.INVALID_PARAMS,
+      });
+    }
+    const radialMenuProblem = radialMenuWriteError(value.radialMenu);
+    if (radialMenuProblem) {
+      throw Object.assign(new Error(radialMenuProblem), {
         errorCode: ErrorCodes.INVALID_PARAMS,
       });
     }

@@ -5,6 +5,40 @@
 
 ## 0. Frozen policy summary
 
+### Parallel read batches
+
+Read, Glob and Grep are the first parallel batch candidates. Task-only batches
+retain their existing parallel fan-out; a batch that mixes Task with Read, Glob
+or Grep is kept sequential: a read ordered before Task finishes before the
+delegate starts, and a read ordered after a writable Task waits for that
+delegate to settle before dispatching to Host. Task keeps its ADR 0089 contract
+inside that batch: it reports a started delegation and the parent converges with
+TaskWait. Any other sequential tool (including Write, Edit, Bash and unknown
+tools) makes its entire assistant batch sequential. This is a per-agent batch
+rule, not application-wide exclusion or a Shell safety lock. Only the selected
+builtin executor receives this allowlist and native path preparation. Same-name
+dynamic tools remain sequential. Delegates retain their startup catalog's policy
+and provenance across later parent catalog rebuilds.
+
+The pinned pi-agent-core prepares all parallel calls in source order before
+launching their execution bodies. Path instruction resolution and prompt updates
+occur during that preparation, after existing parent mode/extension checks.
+Execution consumes the same normalized arguments. Direct internal invocations
+retain preflight. Child preflight updates the child's system transcript only;
+it never replaces parent instructions. Sibling instruction chains replace one
+another according to preparation order, regardless of completion order.
+
+Permissions, Host capacities, mutation recovery, Hashline validation and tool
+result IDs remain authoritative. Completion events may arrive out of order;
+model tool results remain in source order. Alongside the mixed Task/read batch
+barrier, `PathMutex` coordinates shared reads against exclusive `Write`/`Edit`
+calls on the same normalized workspace path so a parent `Read` does not overlap
+an in-flight delegate mutation on that file. Stop skips unstarted calls; already
+started file RPCs drain through their existing Host lifecycle. Host file
+cancellation and resource coordination are separate follow-up work.
+
+See [the ADR](../../adr/parallel-read-batches.md).
+
 | Topic | Decision |
 |---|---|
 | Default mode | Agent |
@@ -327,7 +361,16 @@ visualization lives as long as its session:
   suffix and never sends the absolute path to Main. Host Core reads only regular
   non-symlink fragments up to 2 MB using pinned native directory capabilities.
   Main validates the private byte response, rejects full documents, and wraps
-  the fragment in a host shell with a strict CSP.
+  the fragment in a host shell with a strict CSP. The shell preloads the
+  bundled D3 and the `viz` chart helpers before the fragment and drops a
+  fragment's own pinned D3 tag. The guest runtime reports the first uncaught
+  fragment script error to the card, which keeps the frame and shows a notice
+  with the bounded message as plain text. A successful `Write` of an `.html`
+  file directly in the session's visualization directory also gets a static
+  check in its result: inline scripts are compiled without running, and
+  literal element ids passed to `viz.render`, `viz.chart`, `getElementById`,
+  or `querySelector("#…")` must exist; problems are listed so the model can fix
+  them with one `Edit`.
   Both the iframe and the response CSP header enforce `sandbox allow-scripts`,
   so omitting the caller's sandbox cannot enable cross-session DOM reads.
   Unix uses relative `openat` and a nonblocking leaf; Windows uses relative

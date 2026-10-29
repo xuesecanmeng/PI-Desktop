@@ -574,6 +574,10 @@ may be retained while exactly one workspace supplies the visible shell context.
   then the left. Selecting a launcher row replaces that New tab with the
   destination or activates its existing singleton. Shortcut labels appear only
   for bindings that actually exist.
+- Right-clicking a tab or invoking the context-menu key on the focused tab opens
+  Close Tab, Close Other Tabs, and Close All Tabs. Close Other Tabs activates the
+  targeted tab and closes every other tab; it is disabled for a single tab.
+  Close All Tabs closes Browser resources and leaves the panel open on New.
 - Activating a tool that is already open activates its existing resource instead
   of replacing it, so Browser keeps its URL and Files its selection (D173).
 - Every resource can be closed from its tab. Closing the active resource selects
@@ -684,6 +688,45 @@ may be retained while exactly one workspace supplies the visible shell context.
   close buttons, and focus handling remain authoritative; native selection is
   not prevented and no pointer capture is added for dismissal.
 
+### 1.11 Transcript background radial menu (opt-in)
+
+- **Settings → General → Radial context menu** carries one switch and four
+  direction pickers. The switch is off unless `AppSettings.radialMenu.enabled`
+  is true, so an upgrade keeps the vertical menu every earlier build shipped.
+- With the switch on, a right-click on the empty transcript background opens a
+  four-sector ring centred on the pointer instead of the vertical conversation
+  menu. Each sector shows its action's icon and label at rest, so the ring is
+  readable without hovering; the sector under the pointer or keyboard focus
+  fills with the hover tone, and the hub at the centre is a recessed well that
+  marks the click point. Message rows, markdown links, file references, tool
+  rows, the sidebar, and the work panel keep their vertical menus.
+- The vocabulary is: copy conversation, select conversation text, copy the last
+  answer, scroll to top, jump to latest, open the built-in browser, toggle the work
+  panel (Open work panel, or Close work panel while it is open), open the
+  project folder, and **Leave empty**. A direction with no action
+  renders a disabled sector rather than reshaping the ring; an action the surface
+  cannot fill stays visible and disabled — copy last answer before any answer
+  text exists, and the three open actions on a remote session (open project
+  folder also before the session has a project path). There is no terminal
+  action: the work panel ships no terminal surface.
+- The sector under the pointer highlights; clicking it runs the action and
+  closes the ring. A click on the hub or outside closes without running. The
+  standard marking gesture works too: a right-press that starts while the ring
+  is open runs the sector it is released on, and releasing in the hub dismisses
+  without running — the release trailing the right-click that opened the ring
+  is inert. Arrow keys move the highlight clockwise and counter-clockwise,
+  Enter runs the highlighted action, and Escape or Tab dismisses. Focus returns
+  through the same outside-press, scroll, resize, and blur listeners as
+  `ContextMenu`.
+- Placement follows the shared floating-layer contract: a viewport-fixed portal
+  measured before reveal, clamped inside the window with the same 8px margin,
+  so a right-click near an edge moves the ring rather than clipping it.
+- An absent preference, a non-boolean `enabled`, or an unknown action resolves
+  per direction to the defaults (up: copy conversation, right: select
+  conversation text, down: jump to latest, left: scroll to top). Settings
+  writes naming an unknown action are rejected by both the renderer and
+  Electron Main.
+
 ## 2. Streaming message behavior
 
 ### 2.1 Token rendering
@@ -742,8 +785,19 @@ may be retained while exactly one workspace supplies the visible shell context.
 - Sending a new prompt, retrying, or regenerating always re-pins follow mode and jumps to the bottom before the turn continues, even if the user had scrolled up
 - "Scroll to bottom" floating button appears as soon as manual upward scrolling
   releases follow mode
-- Click "Scroll to bottom" button: resumes auto-scroll and snaps to bottom
-- Stream completion: if user was auto-scrolling, keep at bottom; if manual, stay at position
+- Click "Scroll to bottom" button: resumes auto-scroll and snaps to bottom.
+  Record the pinned bookmark synchronously, before any smooth-scroll event:
+  immediately switching sessions or projects must preserve this follow intent
+  even if the original pane is hidden or unmounted before scrolling finishes.
+  Returning follows the latest output rather than restoring the old reading
+  offset. Manual upward reading without that click still retains its position.
+- Stream completion (D676): if the user was following a turn that completes,
+  its prompt scrolls to 16px below the titlebar band at the top of the
+  viewport so the answer reads from its start, follow mode is released, and
+  jump-to-latest appears. The view does not move when the prompt is already in
+  view, the turn failed or was aborted, the pane is hidden, or a queued
+  follow-up starts at once. If the user had scrolled manually, the view stays
+  at their position.
 - An asynchronously completed diagram height update follows the same rule:
   ResizeObserver keeps a pinned transcript at the bottom, while a user who has
   scrolled upward remains at their reading position.
@@ -763,6 +817,14 @@ may be retained while exactly one workspace supplies the visible shell context.
 - Background sessions continue without adding progress chrome to the visible
   session or moving focus. Reduced motion therefore has no progress-card
   transitions to preserve.
+- A restored reading range that has reached the canonical live tail presents
+  the session's running phase, elapsed time, and interaction waits normally.
+  Keeping its reading bookmark does not mean the turn has finished. Rejoining
+  live output preserves the viewport rather than acting like a new turn.
+  Explicit search, unread later pages, and disjoint snapshots remain historical.
+  Reading ranges require a non-empty canonical message identity, compared by
+  message id across history object copies. The ordinary canonical surface still
+  shows the first-event wait before its first message arrives.
 
 ### 2.5 Turn outcome closure
 
@@ -843,7 +905,9 @@ may be retained while exactly one workspace supplies the visible shell context.
   under a different permission mode stays queued for the next turn. Promoted
   rows retain Remove until delivery and show Waiting to send. Removal
   waits for Host acknowledgement; if delivery wins the race, report that the
-  message has already started and direct the user to Stop.
+  message has already started and direct the user to Stop. With the composer
+  empty, the steering shortcut in §3.5 promotes the first waiting row the same
+  way, so Send now never requires the pointer.
 - Without Send now, the next FIFO row starts automatically after the active
   turn completes, fails, or is aborted. A terminal event can arrive before
   persistence releases the session; finalization must wake the queue again
@@ -857,6 +921,14 @@ may be retained while exactly one workspace supplies the visible shell context.
 - `Alt+Enter` submits the visible draft to the current turn immediately. On
   macOS this is `Option+Enter`. It works with Enter-to-send on or off and takes
   precedence over an open autocomplete menu. An idle composer sends normally.
+- With an empty composer the same shortcut sends the first waiting follow-up
+  now, exactly as that row's Send now action does, so a prompt queued during the
+  turn is not stranded above the composer. Rows still awaiting Host admission
+  and already promoted rows are skipped. A visible draft always takes
+  precedence over the queue, and a blocked composer promotes nothing. Like the
+  row action, this does not depend on the session's steering capability: where
+  steering is unavailable the Host keeps the promoted row queued, so the
+  shortcut sends the next queued follow-up as soon as the turn ends.
 - `Shift+Enter` and `Alt+Shift+Enter` insert a newline. An Enter confirming an
   IME candidate (`isComposing` or key code 229) never sends or steers.
 - Steering appears as a user message in the current transcript, clears the

@@ -113,6 +113,8 @@ import type {
   AppMenuCommand,
   AppNotification,
   NativeMenuAction,
+  WorkPanelTabMenuAction,
+  WorkPanelTabMenuRequest,
   NotificationListResult,
   ReviewRollbackResult,
   PlanProposal,
@@ -162,6 +164,8 @@ import {
   normalizeMode,
   normalizeNetworkProxy,
   normalizeNetworkPolicy,
+  normalizeRadialMenuPreferences,
+  radialMenuWriteError,
   resolveFontScale,
   normalizeChatContentMaxWidth,
   validateNetworkPolicy,
@@ -449,6 +453,7 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
       (settings as { largePasteThreshold?: unknown }).largePasteThreshold,
     ),
     fontScale: resolveFontScale(settings),
+    radialMenu: normalizeRadialMenuPreferences(settings.radialMenu),
     networkProxy: normalizeNetworkProxy(
       (settings as { networkProxy?: unknown }).networkProxy,
     ),
@@ -485,6 +490,12 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     !isTranscriptDisplayModeValue(settings.transcriptDisplayMode)
   ) {
     throw Object.assign(new Error("transcriptDisplayMode is invalid"), {
+      errorCode: "INVALID_PARAMS",
+    });
+  }
+  const radialMenuProblem = radialMenuWriteError(settings.radialMenu);
+  if (radialMenuProblem) {
+    throw Object.assign(new Error(radialMenuProblem), {
       errorCode: "INVALID_PARAMS",
     });
   }
@@ -722,7 +733,7 @@ export const api = {
     bootId?: string;
   }) => invoke<{ ok: boolean }>(IPC.invoke.pluginSessionActive, input),
   listSessions: () =>
-    invoke<{ sessions: SessionSummary[] }>(IPC.invoke.sessionList).then((result) => ({
+    invoke<{ sessions: SessionSummary[]; runningSessionIds?: string[] }>(IPC.invoke.sessionList).then((result) => ({
       ...result,
       sessions: result.sessions.map(normalizeSession),
     })),
@@ -796,7 +807,7 @@ export const api = {
   configureSession: (
     id: string,
     config: Pick<SessionSummary, "mode" | "providerId" | "modelId"> &
-      Partial<Pick<SessionSummary, "thinkingLevel" | "permissionMode">>,
+      Partial<Pick<SessionSummary, "thinkingLevel" | "permissionMode" | "fastMode">>,
   ) =>
     invoke<{ session: SessionSummary }>(
       IPC.invoke.sessionConfigure,
@@ -1113,6 +1124,16 @@ export const api = {
     ),
   replaceSessionMessages: (sessionId: string, messages: UiMessage[]) =>
     invoke(IPC.invoke.sessionReplaceMessages, { sessionId, messages }),
+  deleteSessionMessage: (input: { sessionId: string; messageId: string }) =>
+    invoke<{ ok: true; deleted: boolean; deletedCount: number }>(IPC.invoke.sessionDeleteMessage, input),
+  retractPendingSessionPrompt: (input: {
+    sessionId: string;
+    userMessageId: string;
+    turnId?: string;
+  }) =>
+    invoke<{ ok: true; retracted: boolean; removedCount: number; reason?: string }>(
+      IPC.invoke.sessionRetractPendingPrompt, input,
+    ),
   saveSessionRevision: (input: {
     sessionId: string;
     rootUserId: string;
@@ -1129,7 +1150,8 @@ export const api = {
     sessionId: string;
     rootUserId: string;
     revisionIndex: number;
-    prefix: UiMessage[];
+    prefix?: UiMessage[];
+    requireCanonicalPrefix?: boolean;
   }) =>
     invoke<{ messages: UiMessage[] }>(IPC.invoke.sessionActivateRevision, input),
   steer: (req: AgentSteerRequest) =>
@@ -1722,6 +1744,8 @@ export const api = {
       IPC.invoke.nativeMenuAction,
       { action },
     ),
+  openWorkPanelTabMenu: (request: WorkPanelTabMenuRequest) =>
+    invoke<WorkPanelTabMenuAction | null>(IPC.invoke.workPanelTabMenu, request),
   onWindowMaximized: (listener: (event: { maximized: boolean }) => void) => {
     if (!window.piDesktop?.on) return () => undefined;
     return window.piDesktop.on(IPC.event.windowMaximized, (payload) =>
