@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Policy-Sync: 2026-09-26.1
+Policy-Sync: 2026-10-29.1
 
 Mandatory rules for AI coding agents working in PI-Desktop.
 
@@ -311,6 +311,13 @@ the latest `origin/main`. Do not open or update a PR that is behind
 A task-candidate E2E result is valid only when its tested commit and
 base revision are known. The PR integration gate then protects against
 `main` changing between local candidate validation and final merge.
+
+### Local develop packaging
+
+For local Windows packaging of `develop`, build only the NSIS installer EXE
+(`PI-Desktop-Setup-<version>.exe`) by default. Portable EXE and ZIP targets
+require an explicit user request. Use the installer-only command in
+`docs/spec/06-delivery/06-release-runbook.md` after the normal build steps.
 
 ---
 

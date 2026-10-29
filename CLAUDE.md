@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Policy-Sync: 2026-09-26.1
+Policy-Sync: 2026-10-29.1
 
 Instructions for Claude Code CLI and Claude Cowork on PI-Desktop.
 
@@ -104,6 +104,13 @@ runtime environment, solely for E2E. Keep temporary profiles, data, sockets,
 ports, logs, and artifacts isolated. Install or rebuild only for missing or
 incompatible host dependencies, and record the reason; clean CI/release
 runners may install from lockfiles.
+
+### Local develop packaging
+
+For local Windows packaging of `develop`, build only the NSIS installer EXE
+(`PI-Desktop-Setup-<version>.exe`) by default. Portable EXE and ZIP targets
+require an explicit user request. Follow the installer-only command in
+`docs/spec/06-delivery/06-release-runbook.md` after the normal build steps.
 
 ### Architecture (frozen)
 

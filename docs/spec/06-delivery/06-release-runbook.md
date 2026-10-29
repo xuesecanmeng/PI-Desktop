@@ -43,6 +43,19 @@ Windows/Linux package PNG, the
 transparent monochrome `build/tray-icon-mac.png` template, and the iconset/ICNS
 when macOS `iconutil` is available, without overwriting the canonical source.
 
+### Local Windows develop packages
+
+For the local `develop` packaging policy in `AGENTS.md`, complete the normal
+workspace dependency, release-host, runtime-bundle, and desktop builds, then
+run this installer-only command from the repository root:
+
+```bash
+pnpm --filter @pi-desktop/desktop exec electron-builder --win nsis --publish never --config.extraMetadata.piDistribution=installed
+```
+
+The generic `dist:win` script builds all three Windows formats. Reserve it
+for explicit requests that include ZIP and portable EXE.
+
 ## 2. Prerequisites (release lane)
 
 1. Apple Developer account with a **Developer ID Application** certificate in

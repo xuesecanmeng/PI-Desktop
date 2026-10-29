@@ -42,6 +42,18 @@ Windows 可执行文件和原生窗口图标中使用 `build/icon.ico`。渲染�
 多尺寸 Windows ICO、512px Windows/Linux 包 PNG，以及 iconset/ICNS（当 macOS
 `iconutil` 可用时），无需覆盖规范来源。
 
+### 本地 Windows develop 打包
+
+本地 `develop` 打包遵循 `AGENTS.md` 中的约束。完成常规的工作区依赖、发布版后端、
+运行时 bundle 和桌面构建后，在仓库根目录执行以下仅生成安装版的命令：
+
+```bash
+pnpm --filter @pi-desktop/desktop exec electron-builder --win nsis --publish never --config.extraMetadata.piDistribution=installed
+```
+
+通用的 `dist:win` 脚本会生成全部三种 Windows 格式，仅在明确要求 ZIP 和便携版 EXE
+时使用。
+
 ## 2. 先决条件（发布通道）
 
 1. Apple 开发者帐户，登录钥匙串中具有 **Developer ID Application** 证书。正式证书为 `Developer ID Application: XingYu Liu (DUV63RKYTW)`（Team ID `DUV63RKYTW`）。
