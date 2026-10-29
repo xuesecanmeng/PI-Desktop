@@ -236,7 +236,7 @@ Object.assign(globalThis, {
     const rect = (edge as HTMLElement).getBoundingClientRect();
     const declaredWidth = Number.parseFloat((edge as HTMLElement).style.width);
     check(
-      rect.right <= window.innerWidth && rect.bottom <= window.innerHeight && rect.width === declaredWidth,
+      rect.right <= window.innerWidth && rect.bottom <= window.innerHeight && Math.abs(rect.width - declaredWidth) < 0.01,
       `edge ring escaped the viewport: ${JSON.stringify({ right: rect.right, bottom: rect.bottom, width: rect.width })}`,
     );
 

@@ -194,13 +194,14 @@ export function RadialMenu({
   // Focus the first actionable item; when every slot is empty, focus the menu
   // itself so keyboard dismissal remains available.
   useEffect(() => {
+    if (!open) return;
     const firstEnabledItem = itemRefs.current[firstEnabledIndex];
     if (firstEnabledItem) {
       firstEnabledItem.focus({ preventScroll: true });
     } else {
       rootRef.current?.focus({ preventScroll: true });
     }
-  }, [firstEnabledIndex]);
+  }, [firstEnabledIndex, open]);
 
   useEffect(() => {
     if (activeIndex === null) return;

@@ -714,7 +714,8 @@ may be retained while exactly one workspace supplies the visible shell context.
   standard marking gesture works too: a right-press that starts while the ring
   is open runs the sector it is released on, and releasing in the hub dismisses
   without running — the release trailing the right-click that opened the ring
-  is inert. Arrow keys move the highlight clockwise and counter-clockwise,
+  is inert. Once the ring is revealed, focus enters its first enabled sector.
+  Arrow keys move the highlight clockwise and counter-clockwise,
   Enter runs the highlighted action, and Escape or Tab dismisses. Focus returns
   through the same outside-press, scroll, resize, and blur listeners as
   `ContextMenu`.

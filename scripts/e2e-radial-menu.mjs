@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveElectronBinary } from "./e2e/boot.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,7 +30,7 @@ await require("esbuild").build({
 });
 await writeFile(
   join(temp, "index.html"),
-  '<!doctype html><html><body style="margin:0"><script src="renderer.js"></script></body></html>',
+  `<!doctype html><html><head><link rel="stylesheet" href="${pathToFileURL(join(desktop, "src/styles/ui-kit.css")).href}"><style>*{box-sizing:border-box}</style></head><body style="margin:0"><script src="renderer.js"></script></body></html>`,
 );
 await writeFile(
   join(temp, "main.cjs"),
@@ -38,9 +38,10 @@ await writeFile(
 const {app,BrowserWindow}=require('electron');
 app.setPath('userData',require('node:path').join(__dirname,'profile'));
 app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('force-prefers-reduced-motion');
 app.whenReady().then(async()=>{
   try {
-    const win=new BrowserWindow({show:false,width:900,height:700,webPreferences:{backgroundThrottling:false,sandbox:true,contextIsolation:true}});
+    const win=new BrowserWindow({show:false,width:900,height:700,webPreferences:{offscreen:true,backgroundThrottling:false,sandbox:true,contextIsolation:true}});
     await win.loadFile(require('node:path').join(__dirname,'index.html'));
     console.log(await win.webContents.executeJavaScript('globalThis.radialMenuProbe()'));
     app.exit(0);
