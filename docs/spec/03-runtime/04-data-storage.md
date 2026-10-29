@@ -146,10 +146,12 @@ narrative text, commands, source code, secrets, and arbitrary plugin-private for
 are preserved. Credentials and their machine key migrate as bytes with their
 permissions. SQLite ownership stays exclusively in Rust.
 
-Relocated project database paths and project-memory/instruction keys retain the
-repository's normalized project-path spelling. In particular, Windows migration
+Relocated project database paths, capability identities, project-memory keys
+and instruction keys retain the repository's normalized project-path spelling.
+In particular, Windows migration
 must not turn slash-normalized lookup keys into mixed-separator keys that make
-existing project memory appear empty after reopening the Host.
+existing project memory appear empty after reopening the Host. Capability-key
+collisions fail relocation instead of replacing a saved override.
 
 Only after validation/relocation succeeds is the flushed bootstrap pointer
 atomically replaced. Errors keep the old profile active and visible in settings;
