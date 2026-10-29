@@ -419,21 +419,15 @@ async fn review_summaries_rpc_never_fabricates_zeros_when_the_center_is_down() {
     let env = MarketEnv::hold();
     env.point_at(OFFLINE_MARKET_URL);
     let (_data, state, tx) = fixture_state();
-    // Bind and drop a port so nothing answers on it.
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    drop(listener);
-    env.point_at(&format!("http://{address}/catalog.json"));
+    let center = Center::start().await;
+    center.set(|fixture| fixture.summaries_override = Some((503, "unavailable".into())));
+    env.point_at(&center.catalog_url);
 
     let error = summaries_via(state, tx, json!(["demo.hello"]))
         .await
         .unwrap_err();
     assert_eq!(error_code(&error), "PLUGIN_NETWORK");
-    assert!(
-        error.message.contains("review request failed"),
-        "{}",
-        error.message
-    );
+    assert!(error.message.contains("answered 503"), "{}", error.message);
 }
 
 #[tokio::test]
