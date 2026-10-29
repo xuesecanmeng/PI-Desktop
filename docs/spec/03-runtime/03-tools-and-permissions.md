@@ -641,6 +641,9 @@ or executable path hash is accepted as shell identity.
 - Git Bash uses the discovered Git for Windows executable.
 - Unix Bash uses an approved system Bash entry.
 - User abort and timeout terminate the complete process tree before returning.
+- Windows descendant termination compares process creation times with current
+  wall time captured before the process snapshot. Processes created after that
+  watermark are excluded to protect against recycled PIDs.
 
 Initial denylist (extensible):
 

@@ -16,6 +16,7 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
+use windows_sys::Win32::System::SystemInformation::GetSystemTimePreciseAsFileTime;
 use windows_sys::Win32::System::Threading::{
     GetExitCodeProcess, GetProcessTimes, OpenProcess, TerminateProcess,
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
@@ -30,11 +31,10 @@ pub(super) fn terminate_tree(root_pid: u32) -> Result<(), String> {
     if root_pid == 0 {
         return Ok(());
     }
+    // Take the watermark before capture so a recycled PID cannot qualify
+    // merely because it appeared during enumeration.
+    let watermark = ProcessTimes::now();
     let snapshot = Snapshot::capture()?;
-    // A process created after the snapshot cannot be one the snapshot
-    // described, so its creation time is the watermark that makes a recycled
-    // PID distinguishable from the real descendant.
-    let watermark = ProcessTimes::now()?;
 
     let mut errors: Vec<String> = Vec::new();
     for pid in snapshot.descendants_deepest_first(root_pid) {
@@ -223,11 +223,16 @@ impl ProcessTimes {
         })
     }
 
-    /// Creation time of the current process, used as the snapshot watermark.
-    fn now() -> Result<Self, String> {
-        let current = unsafe { windows_sys::Win32::System::Threading::GetCurrentProcess() };
-        Self::of(current)
-            .map_err(|error| format!("GetProcessTimes failed for the current process: {error}"))
+    /// Current wall time in the same FILETIME units as process creation.
+    fn now() -> Self {
+        let mut now = FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        };
+        unsafe { GetSystemTimePreciseAsFileTime(&mut now) };
+        Self {
+            created: (u64::from(now.dwHighDateTime) << 32) | u64::from(now.dwLowDateTime),
+        }
     }
 
     fn created_after(&self, watermark: &Self) -> bool {
@@ -246,12 +251,7 @@ mod tests {
 
     #[test]
     fn children_are_terminated_before_their_parents() {
-        let edges = HashMap::from([
-            (10, vec![11]),
-            (11, vec![12]),
-            (12, vec![13]),
-            (11, vec![14]),
-        ]);
+        let edges = HashMap::from([(10, vec![11]), (11, vec![12, 14]), (12, vec![13])]);
         let order = Snapshot { edges }.descendants_deepest_first(10);
         let position = |pid: u32| order.iter().position(|entry| *entry == pid).unwrap();
         assert!(position(13) < position(12));
@@ -289,5 +289,12 @@ mod tests {
         assert!(ProcessTimes::from_raw(1_001).created_after(&watermark));
         assert!(!ProcessTimes::from_raw(1_000).created_after(&watermark));
         assert!(!ProcessTimes::from_raw(999).created_after(&watermark));
+    }
+
+    #[test]
+    fn snapshot_watermark_is_later_than_host_startup() {
+        let current = unsafe { windows_sys::Win32::System::Threading::GetCurrentProcess() };
+        let started = ProcessTimes::of(current).unwrap();
+        assert!(ProcessTimes::now().created_after(&started));
     }
 }

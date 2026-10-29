@@ -8445,7 +8445,10 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
   elapsed time and shows its streamed output; the process stays alive across the
   abort, across the 60-second Bash timeout, and across a renderer reload.
   `Stop` settles the row to `Stopped` and kills the process tree; quitting the
-  app leaves no orphan process behind. The ten-task list scrolls within its
+  app leaves no orphan process behind. On Windows, a command and grandchild
+  created after Host startup must both exit; snapshot timestamps use current
+  wall time and exclude later recycled PIDs. Native host-core tests cover the
+  runner chain, branching order and watermark. The ten-task list scrolls within its
   height cap without displacing Todo, Ask, or input. Only the selected log is
   fetched and refreshed; old responses cannot erase it. Each stream remains
   bounded to 256KiB and retains its final marker after exit. A Stop failure is
