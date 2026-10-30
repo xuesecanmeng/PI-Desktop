@@ -297,4 +297,30 @@ mod tests {
         let started = ProcessTimes::of(current).unwrap();
         assert!(ProcessTimes::now().created_after(&started));
     }
+
+    #[cfg(windows)]
+    #[test]
+    fn snapshot_watermark_includes_processes_started_after_the_host() {
+        use std::os::windows::{io::AsRawHandle, process::CommandExt};
+
+        let mut child = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Start-Sleep -Seconds 120",
+            ])
+            .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW)
+            .spawn()
+            .unwrap();
+        let created = ProcessTimes::of(child.as_raw_handle() as HANDLE);
+        let watermark = ProcessTimes::now();
+        child.kill().unwrap();
+        child.wait().unwrap();
+
+        assert!(
+            !created.unwrap().created_after(&watermark),
+            "a process spawned after the Host must remain eligible for cleanup"
+        );
+    }
 }
