@@ -58,11 +58,15 @@ export function latestTurnContextInspector(
   const boundaryIndex = latestMark
     ? messages.findIndex((message) => message.id === latestMark.throughMessageId)
     : -1;
+  const localEstimate = latestMark?.tokensAfter;
+  const estimate =
+    localEstimate !== undefined && Number.isFinite(localEstimate) && localEstimate >= 0
+      ? localEstimate
+      : latestMark?.contextTokens;
   const estimatedOccupancyTokens =
-    latestMark?.tokensAfter !== undefined &&
-    Number.isFinite(latestMark.tokensAfter) && latestMark.tokensAfter >= 0 &&
+    estimate !== undefined && Number.isFinite(estimate) && estimate >= 0 &&
     boundaryIndex >= latestUsageIndex
-      ? Math.round(latestMark.tokensAfter)
+      ? Math.round(estimate)
       : undefined;
 
   const { entries } = getTranscriptProjection(messages, compactions);

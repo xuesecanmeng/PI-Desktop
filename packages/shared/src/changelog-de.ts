@@ -6,6 +6,7 @@ export const deEntries: ChangelogEntry[] = [
     date: "2026-10-24",
     highlights: [
       "Develop-Pakete deaktivieren App-Updates; die installierte Version ändert sich nur durch eine ausdrückliche Neuinstallation.",
+      "Plugins können gespeicherte Projekte und ihre Ordner auflisten, ohne die aktive Sitzung zu wechseln.",
       "Die Pi-1.3.0-Engine verbessert die Validierung von Tool-Aufrufen und die sichere Wiedergabe des Verlaufs.",
       "Optionale Inline-Visualisierungen unter Einstellungen → KI zeigen interaktive, isolierte Karten direkt im Gespräch.",
       "Browserseiten einer Sitzung bleiben bei verborgenem Arbeitsbereich, Sitzungswechsel und Neuladen der Oberfläche verfügbar.",

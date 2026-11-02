@@ -55,6 +55,14 @@ test("restored compaction marks tolerate legacy, invalid and unavailable estimat
   assert.equal(latestTurnContextInspector(history, providerModels, providers, [{ ...mark, throughMessageId: "unloaded", tokensAfter: 10 }])?.estimatedOccupancyTokens, undefined);
 });
 
+test("restored upstream estimates remain readable and local estimates take precedence", () => {
+  const history = [message("before", "assistant", "done", { usage: { inputTokens: 100, outputTokens: 5, totalTokens: 105 } })];
+  const mark = { id: "compacted", generation: 1, summaryTokens: 1, summarized: true, throughMessageId: "before", contextTokens: 24 };
+  assert.equal(latestTurnContextInspector(history, providerModels, providers, [mark])?.estimatedOccupancyTokens, 24);
+  assert.equal(latestTurnContextInspector(history, providerModels, providers, [{ ...mark, tokensAfter: 12 }])?.estimatedOccupancyTokens, 12);
+  assert.equal(latestTurnContextInspector(history, providerModels, providers, [{ ...mark, tokensAfter: -1 }])?.estimatedOccupancyTokens, 24);
+});
+
 test("delegate usage does not displace the parent's post-compaction occupancy", () => {
   const history = [
     message("parent", "assistant", "done", { usage: { inputTokens: 200, outputTokens: 10, totalTokens: 210 } }),
