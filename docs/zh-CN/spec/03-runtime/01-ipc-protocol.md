@@ -1439,24 +1439,39 @@ Chrome 和代理 CDP 位于随应用打包的 `pi.browser` 插件中，通过 `p
 
 ### fs（只读）
 
-- `fs/list({path})` → 条目首先按目录排序；忽略 `.git`，
-  `node_modules`，默认忽略子集
-  [15-工作区-忽略-规则](/zh-CN/spec/03-runtime/15-workspace-ignore-rules)
-- `fs/read({path, mimeType?})` → 文本 (≤512KB) / 图像数据 URL (≤5MB) / 二进制 / 太大。相对路径在工作区根内解析；`attachments/<sha256>` 以及已位于工作区、`<data_dir>/scratch/` 或 `<data_dir>/attachments/` 下的绝对路径在 realpath 校验后也可读（D334 / ADR 0172）；同一项目组中其他文件夹里的绝对路径同样可读（ADR 0249 §5、ADR 0263）。已知图片扩展名优先于 `mimeType`；无扩展名 blob 只接受图片 MIME 白名单。穿越、`~` 和其他逃逸被拒绝（`INVALID_ARGUMENT`）。
-- `fs/readImageDataUrl({ref, mimeType?})` → `FsImageDataUrlResult`（`image` 带 `dataUrl`，或 `missing` / `notImage` / `tooLarge`）。包含范围与 `fs/read` 相同。从不返回非图片字节。仅渲染器使用，不是插件宿主 API。
-- `fs/reveal({path, sessionId?})` selects a regular file in the system file
-  manager or opens a directory's contents. It shares `fs/open` containment,
-  existing-path validation and remote-session restrictions.
-- `fs/openInVSCode({path, sessionId?})` opens an existing contained local file or
-  directory in VS Code. After the same path/remote checks as `fs/open`, Main
-  constructs a fixed `vscode://file` URI with an encoded path (trailing `/` for
-  directories). Input cannot select a URL, scheme, executable or arguments.
-  General external-URL allowlisting and Plugin SDK contracts are unchanged.
-  Launch failure is returned to the renderer; no alternate destination opens.
-- `fs/open({path, mimeType?, sessionId?})` opens an existing file with the system default application, or a directory with the system file manager. It retains the canonical allowed-root checks and the MP4 attachment association behavior of `fs/read` / `fs/open`.
-- `fs/resolveRef({ref, sessionId?, allowDirectories?})` → `FsChatRefResolveResult`（`{ match: FsChatRefMatch | null }`，match 指出应答的 `root`（`workspace` / `scratch` / `attachments`）、相对该应答根的 `relativePath`、绝对路径 `absolutePath` 与 `matchedBy`（`exact-relative` / `exact-absolute` / `path-suffix` / `basename`），以及在 `workspace` 命中时给出的 `projectRoot`（`{ path, name, primary }`，指出是哪个文件夹应答的））；`sessionId` 决定查哪个会话的临时目录。隔离会话以 `worktree.location` 而不是父项目 checkout 作为查找与读取的根；落在父 checkout 内的绝对引用会先映射到 worktree 中的同一相对路径（该文件存在时），从而打开分支上的副本，而不是报 `outside-allowed-roots`。它补全智能体在聊天里打印的文件引用，因为渲染器看不到会话自己的临时目录：已经在某个已知根内指向真实文件的绝对引用直接胜出，`attachments/<sha256>` blob 直接对附件库解析；否则按优先级顺序搜索各根——整个打开的项目、再会话自己的临时目录（`<data_dir>/scratch/<sessionId>/`，ADR 0124）、最后附件库——第一个给出结果的根胜出。项目指的是打开的工作区背后的文件夹组（ADR 0249）：主文件夹先应答，其余文件夹随后按项目组自身顺序搜索（ADR 0263），因此简写落在同级文件夹里和落在主文件夹里一样自然，命中结果也指出是哪个文件夹应答的。同一个根内精确路径优先于简写；简写之间最长匹配尾优先，其次路径更浅者。文件面板的忽略集合同样生效。什么都没匹配到时返回 `match: null`；解析本身不打开任何东西（ADR 0262）。
-- `allowDirectories` defaults to false. When true, exact contained directories may match with `isDirectory: true`; fuzzy searches and attachment hashes remain file-only. Worktree rebasing also covers directories.
-- `fs/list` keeps relative paths workspace-only. Absolute directory listing uses the same canonical roots as `fs/read`, retains ignore rules and rejects escaping child symlinks.
+本地桌面用户操作可访问操作系统允许的本地文件或目录，无需项目/存储根授权。
+绝对路径、本地 file URL、主目录路径及相对工作区路径（包括父级路径）均可使用。
+远程 Host、Agent 和插件仍遵守各自的范围限制；远程工作区不会回退访问本机文件。
+详见 [本地用户文件访问](../../../adr/user-local-file-access.md)。
+
+- `fs/list({path, sessionId?})` → 目录优先排序的条目；忽略 `.git`、`node_modules`
+  和 [工作区忽略规则](/zh-CN/spec/03-runtime/15-workspace-ignore-rules) 的默认子集。
+  本地目录及有效子链接可跨项目边界；空路径列出工作区根，绝对路径不要求项目存在。
+- `fs/read({path, mimeType?})` → 文本（≤512KB）/ 图片数据 URL（≤5MB）/ 二进制 / 过大。
+  相对路径以工作区为基准，`attachments/<sha256>` 从附件库存读取；外部本地文件无需注册目录。
+  已知图片扩展名优先于 `mimeType`，无扩展名 blob 只接受图片 MIME 白名单；缺失或系统访问失败须报告。
+- `fs/readImageDataUrl({ref, mimeType?})` → `FsImageDataUrlResult`（`image` 带 `dataUrl`，
+  或 `missing` / `notImage` / `tooLarge`）。遵循相同本地用户路径策略，含外部图片；
+  不返回非图片字节，仅供渲染器使用，不是插件宿主 API。
+- `fs/reveal({path, sessionId?})` 在系统文件管理器中选中普通文件或打开目录内容；与
+  `fs/open` 共享路径解析、现存文件校验和远程会话限制。
+- `fs/openInVSCode({path, sessionId?})` 在 VS Code 中打开现存本地文件或目录；Main 使用
+  同样的路径和远程检查，构造固定的 `vscode://file` 编码 URI（目录末尾带 `/`）。输入不能
+  选择 URL、scheme、可执行文件或参数；通用外部 URL 白名单与插件 SDK 契约不变，失败须报告。
+- `fs/open({path, mimeType?, sessionId?})` 通过系统默认应用打开本地文件或通过文件管理器打开目录；
+  解析现存真实路径，无需项目包含。声明为 `video/mp4` 的无扩展名附件 blob 使用私有应用数据目录
+  中的 `.mp4` 符号链接交给系统，不复制视频字节。
+- `fs/resolveRef({ref, sessionId?, allowDirectories?})` → `FsChatRefResolveResult`；
+  匹配结果包含 `root`（`workspace` / `scratch` / `attachments` / `external`）、`relativePath`、
+  `absolutePath`、`matchedBy` 和工作区匹配的 `projectRoot`。外部命中使用空 `relativePath`；
+  `sessionId` 选择会话暂存目录，隔离会话优先将父 checkout 路径重映射到 worktree 对应文件或目录。
+  精确本地路径先匹配自身，附件哈希直接匹配附件库；简写依次搜索整个项目组（主文件夹优先，
+  其余按组顺序）、会话暂存目录、附件库。同一根内精确路径优先；简写的完整后缀必须唯一匹配
+  安全文件，不降级为更短后缀，歧义返回 `match: null`；索引候选的真实路径须留在对应根内。
+  外部精确路径可解析为 `external`，不会搜索父目录或回退到同名文件；有效外部链接也可解析，
+  悬空链接不可回退。远程范围查找可返回 `reason: "outside-allowed-roots"`，本地用户查找不返回。
+  `allowDirectories` 默认为 false；为 true 时精确路径可返回 `isDirectory: true`，简写和附件哈希
+  仍仅匹配文件。解析本身不打开文件（ADR 0262 及 [文件打开修订](../../../adr/configurable-file-opening.md)）。
 
 ## 13b. 桌面菜单和窗口 API
 

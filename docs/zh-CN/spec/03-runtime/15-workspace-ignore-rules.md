@@ -1,6 +1,6 @@
 # 15. 工作区忽略规则
 
-> The `.env` read rules in this translation predate ADR 0338. See the
+> The `.env` read rules in this translation predate ADR 0343. See the
 > [English specification](/spec/03-runtime/15-workspace-ignore-rules) for the
 > current behavior.
 

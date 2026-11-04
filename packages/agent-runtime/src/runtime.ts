@@ -17,6 +17,7 @@ import { restoreHostedSearchReplay } from "./hosted-search-replay.js";
 import { requestExtensionUi } from "./extensions/ui-request.js";
 import { readLocalRequestErrorDetails } from "./local-request-errors.js";
 import { isValidToolCall, recoverMalformedToolCalls } from "./tool-call-recovery.js";
+import { computerUseDescription, computerUseParameters } from "./computer-use/tool.js";
 import { imageGenerationDescription, imageGenerationParameters } from "./image-generation/tool.js";
 import { todoWriteDescription, todoWriteParameters } from "./todo-tool.js";
 import { createJevClassifierTool } from "./jev-classifier-tool.js";
@@ -1015,6 +1016,12 @@ export type AgentRuntimeOptions = {
   fastMode?: boolean;
   /** TypeSafe Jev credential, resolved by Electron main only when enabled. */
   jevApiKey?: string;
+  /**
+   * Whether the `Computer` tool is offered at all (ADR 0342). Resolved by
+   * Electron main from settings, so a disabled feature is absent from the
+   * prompt rather than advertised and refused on every call.
+   */
+  computerUseEnabled?: boolean;
   systemPrompt?: string;
   /** pi-compatible SYSTEM.md / APPEND_SYSTEM.md resolved for the session (issue #542). */
   customSystemPrompt?: CustomSystemPrompt;
@@ -1091,6 +1098,7 @@ export type RuntimeMatchConfig = {
   provider: RuntimeProviderConfig;
   thinkingLevel: SessionThinkingLevel;
   jevApiKey?: string;
+  computerUseEnabled?: boolean;
   pluginTools?: PluginToolDef[];
   pluginSkills?: PluginSkillDef[];
   trustedExtensions?: TrustedExtensionSpec[];
@@ -1787,6 +1795,7 @@ export class DesktopAgentRuntime {
   private model: Model<Api>;
   private turnId?: string;
   private disposed = false;
+  private aborting?: Promise<void>;
   readonly sessionId: string;
   private mode: Mode;
   private provider: RuntimeProviderConfig;
@@ -1929,6 +1938,7 @@ export class DesktopAgentRuntime {
   private infiniteProviderRetry = false;
   private fastMode = false;
   private jevApiKey?: string;
+  private computerUseEnabled = false;
   private activeProviderRetryAttempt = 0;
   private providerRetryInProgress = false;
   private suppressProviderRetryRunEnd = false;
@@ -2040,6 +2050,7 @@ export class DesktopAgentRuntime {
     this.infiniteProviderRetry = opts.infiniteProviderRetry === true;
     this.fastMode = opts.fastMode === true;
     this.jevApiKey = opts.jevApiKey;
+    this.computerUseEnabled = opts.computerUseEnabled === true;
     this.host = opts.host;
     this.batchPlanner = new BatchPlanner(this.host, this.sessionId);
     this.onDiagnostic = opts.onDiagnostic ?? (() => undefined);
@@ -2733,6 +2744,9 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       ["disposed", !this.disposed],
       ["mode", this.mode === config.mode],
       ["jevApiKey", this.jevApiKey === config.jevApiKey],
+      // Turning computer use on or off changes the tool list, so the runtime
+      // is retired rather than left advertising a stale set.
+      ["computerUseEnabled", this.computerUseEnabled === (config.computerUseEnabled === true)],
       ["thinkingLevel", this.thinkingLevel === clampThinkingLevel(config.provider, config.thinkingLevel)],
       ["pluginTools", current === next],
       ["commandShell", safeJson(this.commandShell) === safeJson(config.commandShell)],
@@ -3292,6 +3306,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
       " An explicit path outside the workspace and session scratch roots requires permission unless the effective mode is Auto.";
     const describe = (toolName: string): string => {
       if (toolName === "GenerateImages") return imageGenerationDescription;
+      if (toolName === "Computer") return computerUseDescription;
       if (scheduledToolDescriptions[toolName]) return scheduledToolDescriptions[toolName];
       switch (toolName) {
         case "BrowserPreview":
@@ -3347,6 +3362,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     // stopped being readable.
     const parameters: Record<string, Parameters<typeof Type.Object>[0]> = {
       GenerateImages: imageGenerationParameters,
+      Computer: computerUseParameters,
       TodoWrite: todoWriteParameters,
       Read: {
         path: pathParam(
@@ -3526,7 +3542,10 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         // waiting on a blocking read/search. Mutating, MCP, and plugin calls
         // must settle before the turn is reported stopped. Bash and image
         // generation retain their host process-abort path and grace window.
-        const hostAbortsProcess = isBash || toolName === "GenerateImages";
+        // Computer use joins them: main owns a loop that must settle before
+        // the turn is reported stopped, not be abandoned mid-action.
+        const hostAbortsProcess =
+          isBash || toolName === "GenerateImages" || toolName === "Computer";
         const canAbandonWait = READ_ONLY_CORE_TOOLS.has(toolName);
         const abortedMarker = Symbol("tool-aborted");
         let resolveAborted: (marker: typeof abortedMarker) => void = () => undefined;
@@ -4004,6 +4023,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
         : ["Read", "Glob", "Grep", "BrowserPreview", "Bash", "Write", "Edit"];
     if (this.mode === "agent") {
       tools.push("PluginScaffold", "PluginPack", "GenerateImages", ...Object.keys(scheduledToolParameters));
+      if (this.computerUseEnabled) tools.push("Computer");
     }
     const builtins = tools.map(exec);
     for (const tool of builtins) this.builtinTools.add(tool);
@@ -9415,11 +9435,16 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     }
   }
 
-  async abort(): Promise<void> {
+  abort(): Promise<void> {
+    return this.aborting ??= this.abortTurn().finally(() => { this.aborting = undefined; });
+  }
+
+  private async abortTurn(): Promise<void> {
     const turnId = this.turnId;
     const settlement = turnId
       ? this.activeTurnSettlements.get(turnId)
       : undefined;
+    const delegates = this.runningDelegations().map((record) => record.completion);
     this.acceptingSteering = false;
     this.gracefulStopRequested = false;
     this.runCancelled = true;
@@ -9440,7 +9465,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     // the whole session until it finished on its own (#1767). Drive the tools
     // from here as well, so a stop always releases them.
     for (const abortTool of [...this.activeToolAborts]) abortTool();
-    await settlement;
+    await Promise.allSettled([...(settlement ? [settlement] : []), ...delegates]);
   }
 
   private trackTurnOperation<T>(
@@ -9484,6 +9509,7 @@ Do not invent objections or turn speculative risks into blockers. Stop when the 
     return {
       sessionId: this.sessionId,
       isRunning:
+        this.aborting !== undefined ||
         this.agent.state.isStreaming ||
         this.compactionInProgress ||
         this.agentActivity !== undefined ||

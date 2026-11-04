@@ -3712,7 +3712,7 @@ IPC 请求无法关闭。
   - 退出并外部单击关闭菜单而不创建任何内容。
 
 #### E2E-076：出现启动画面，然后返回主 shell
-- **状态**：部分自动化（`startup-splash-motion.test.mjs` 涵盖启动标记、运动标记、简化运动和目录键；`macos-sidebar-vibrancy.test.mjs` 覆盖 darwin 玻璃启动页与 shell 交叉淡入；全窗口计时仍为草稿）
+- **状态**：部分自动化（`startup-splash-motion.test.mjs` 涵盖启动标记、运动标记、简化运动和目录键；`macos-sidebar-vibrancy.test.mjs` 覆盖 darwin 玻璃启动页与 shell 交叉淡入；`startup-animation.test.mjs` 与 `packages/shared/src/startup-animation.test.ts` 覆盖 D679 动画的边界、状态机、选片、界面与启动界面优先级；`pnpm test:e2e:startup-animation` 用生成的视频启动真实应用，断言 `pi-startup:` 解码、播放推进、渐显，以及不可播放文件仍会交出主界面；全窗口计时仍为草稿）
 - **优先级**：P1
 - **封面**：A，品质/US-UI 外壳抛光
 - **先决条件**：应用程序启动路径可用（开发或打包）。
@@ -3723,14 +3723,21 @@ IPC 请求无法关闭。
   4. 如果可用，请对 OS `prefers-reduced-motion: reduce` 重复此操作。
   5. 在 macOS 上，将启动面与 shell 出现后的侧边栏玻璃态对比。
   6. 在 `bootstrap` 一直被搁置、超过看门狗界限时重复一次，在 30 秒与超过 180 秒时观察启动表面（issue #831）。
+  7. 把一个可播放的短视频放进 `<dataDir>/startup/` 后重新启动（D679）。
+  8. 换成不可播放的文件（例如改名的文本文件）后重新启动。
+  9. 保留该动画，分别在 `prefers-reduced-motion: reduce` 下启动、重载渲染器、以及关闭窗口后从托盘或 Dock 重新打开。
 - **预期**：
 - 准备之前：带有品牌标志、外壳名称、标语和可访问的启动状态 (`data-testid="startup-splash"`) 的全窗口启动画面。
   - 准备好后：启动画面会短暂淡出（或立即减少运动）退出，并且主外壳（或设置页面）在下面是交互式的。
   - 如果初始状态始终没有到达，启动画面不是被一直保留而是被替换：启动表面在 30 秒（`STARTUP_SLOW_HINT_MS`）时加上日志、诊断与退出且不报告失败，在 180 秒（`STARTUP_STALLED_MS`）时变成恢复表面，并额外提供重试（`data-testid="startup-recovery"`）；每个操作都不依赖后端，Windows/Linux 上渲染器绘制的窗口控制按钮保持在该表面之上，退出走 `pi-desktop/app/quit`。
   - macOS 上启动页与侧边栏使用同一套玻璃 tint/sheen，叠在原生 `sidebar` vibrancy 之上；已挂载的 shell 在退出淡出前保持隐藏，再交叉淡入。其他平台仍为不透明的 `--ds-bg-primary`。
+  - `<dataDir>/startup/` 中有视频时（D679）：首个绘制帧里 `data-testid="startup-animation"` 取代启动画面，在不透明黑底上播放，无控件无声音，播完后同一层黑色继续遮住窗口直到引导完成，然后在约一秒内淡出，淡出期间主界面已可点击。启动比视频慢时，黑幕满 3 秒后出现不确定进度条。`Escape` 直接跳到该淡出。
+  - 不可播放的文件绝不会劫持启动：动画在 2 秒内（无首帧）或 `error` 时结束，渐显与正常播完完全一致。
+  - 减少运动、渲染器重载，以及从托盘或 Dock 重新打开的窗口都不播放动画，改用品牌启动画面。设置 → 常规 → 外观 会显示选中的文件、提供打开文件夹的动作，开关改动只在下次启动生效。
+  - 启动被搁置超过看门狗边界时，恢复界面取代动画——绝不会被留在不透明遮罩后面。
   - 没有简单的无品牌“开始...”居中文本作为唯一的启动 UI。
   - Overlay/dialog 输入动作使用共享令牌；减少的运动可以保持状态变化，而无需装饰持续时间。
-- **链接规格**：`04-ux/07-ui-design-system.md` §8、`04-ux/02-i18n-english-first.md`、决策日志 D146 / D304 / D348
+- **链接规格**：`04-ux/07-ui-design-system.md` §8、`04-ux/02-i18n-english-first.md`、`04-ux/09-interaction-patterns.md` 第 1.12 节、ADR 0338、决策日志 D146 / D304 / D348 / D679
 - **验收**：A（应用程序启动），质量
 - **里程碑**：M5
 #### E2E-099：品牌标志遵循活跃主题
@@ -7695,11 +7702,13 @@ eleven-tool-round desktop paths are verified by
 - **预期**：
   - 每条已发送引用画成紧凑的叶子名芯片（图标 + 名称），而不是完整 `@path`。工具提示和无障碍名称保留规范路径。带引号路径和临时绝对路径也包括在内。
   - 芯片加上短提示时，用户气泡按内容收缩，而不是撑到 `min(82%, 600px)` 上限。
-  - 点击 HTML 芯片在工作面板浏览器打开该文件。
-  - 点击工作区源文件芯片后，该文件在文件管理器工作面板视图中打开；芯片点击不再打开宿主的 `file:` 选项卡，也不再交给系统默认应用。
+  - 在内置偏好下，HTML 芯片作为源码在文件管理器打开；Open with 可显式选择浏览器。
+    系统偏好则交给系统默认应用。工作区源文件的内置目标为文件管理器工作面板视图。
   - 点击临时目录芯片时，文件在宿主的 `file:` 选项卡中按其绝对路径打开——它位于文件管理器项目根之外。
   - 点击项目第二个文件夹里那个文件的芯片时，该文件在文件管理器视图中打开：补全会搜索整个项目组、主文件夹优先，同级文件夹里的文件用绝对路径寻址，因为相对路径永远指主文件夹（ADR 0263）。
-  - 右键文件引用会打开渲染器自己的菜单：在文件夹中显示该文件，并复制它的完整地址与相对地址；助手 Markdown 里的行内代码引用、文件链接与本地图片、工具行自己的文件路径、工具结果的文件列表或匹配列表中的路径、图片附件芯片都提供这几项，而什么都没匹配到的引用会自己报告出来，而不是去显示别处同名的那份文件。复制写出的就是它说的地址：完整地址即绝对路径，相对地址即项目内相对写法；临时目录或附件文件没有相对地址，会直接说明，而不是把绝对路径当成相对地址写出去。
+  - 本地引用菜单提供在 VS Code 中打开、复制完整与相对路径以及在文件管理器中打开；
+    目录打开其内容，文件被选中。所有引用入口使用同一解析；缺失引用报告错误而不回退
+    到同名文件，暂存或附件文件没有项目相对地址。远程工作区只保留复制操作。
   - 持久化用户消息仍包含给模型用的规范 `@path` 文本。
 - **链接规格**：`04-ux/08-component-spec.md` §8.3 / §11.8、
   `04-ux/09-interaction-patterns.md` §8a.2、`03-runtime/01-ipc-protocol.md`、
@@ -7715,7 +7724,7 @@ eleven-tool-round desktop paths are verified by
 - **步骤**：1）让一轮回复用行内代码提到 `openimage.js`，点击它。2）让一轮回复提到 `dir/a.ts`，点击它。3）让一轮回复提到只存在于临时目录的文件并点击，再对 `attachments/<sha256>` 引用做同样操作。4）让一轮回复给出某个项目文件的绝对路径（该叶子名在临时目录里也存在），点击它。5）让一轮回复提到 `missing-helper.js`，点击它。6）让一轮回复提到 `only-here.ts`，点击它。
 - **预期**：
   - 点击 `openimage.js` 打开项目里的 `img/openimage.js`，而不是临时目录里的同名文件：项目会被搜到底，之后才会考虑临时目录。
-  - `dir/a.ts` 打开 `src/dir/a.ts`：精确路径优先于简写，更长的匹配尾优先于裸叶子名，尾长相同则更浅的路径胜出，因此更深的 `packages/app/dir/a.ts` 永远不会被选中。
+  - `dir/a.ts` 若完整后缀唯一匹配则打开对应文件；若两份均匹配则报告歧义，不按深度猜测。
   - 项目里找不到的引用回落到会话临时目录；两边都没有的再回落到附件目录，`attachments/<sha256>` 引用打开对应的已存 blob。
   - 指向已知根内真实文件的绝对引用直接命中，无论哪条简写规则本来会匹配。
   - `only-here.ts` 打开第二个文件夹里的 `lib/only-here.ts`：先搜主文件夹并搜到底，再按项目组自身顺序搜索其余文件夹，命中结果也指出是哪个文件夹应答的（ADR 0263）。
@@ -7734,9 +7743,11 @@ eleven-tool-round desktop paths are verified by
   - 项目文件在文件管理器工作面板视图中打开：该文件被选中、祖先目录已展开，不会为它新增宿主 `file:` 选项卡。
   - 再次点击同一引用不会重新加载视图：未保存的改动仍在编辑器里，也不会出现第二个选项卡。
   - 临时目录或附件里的文件在宿主的 `file:` 选项卡（位于「已打开项目」下）中按绝对路径打开，而不是在文件管理器视图中打开。
-  - 项目主文件夹里的 `.html` / `.htm` 页面在旁浏览器中打开，助手回复和用户芯片两条路径一致；同级文件夹里的页面和别的项目文件一样在文件管理器视图中打开，因为旁浏览器以主文件夹为根（ADR 0263）。
+  - 主文件夹和同级文件夹中的 HTML 普通点击遵循统一的文件偏好：内置模式为文件管理器
+    源码，系统模式为系统默认应用；Open with 可显式选择浏览器。用户芯片和助手回复一致。
   - 解析到项目第二个文件夹的引用在文件管理器视图中打开该文件，用绝对路径寻址，不会新增宿主 `file:` 选项卡；解析到主文件夹的引用也在同一视图中打开，按项目内相对路径寻址（ADR 0263）。
-  - 插件被禁用时，项目文件引用退回到宿主的 `file:` 选项卡（也就是改动前点击所用的界面，现在也能覆盖项目里的其他文件夹），而不是什么都不打开；重新启用后恢复为文件管理器视图。
+  - 直接点击项目文件会尝试启用内置 File Manager；权限或范围不允许、或视图仍不可用时，
+    回退宿主 `file:` 并提示。已有权限与项目范围不会被扩大。
 - **链接规格**：`04-ux/08-component-spec.md` §8.3、`04-ux/09-interaction-patterns.md` §8a.2、ADR 0104、ADR 0163、ADR 0241、ADR 0249、ADR 0262、ADR 0263
 - **验收**：C（对话和直播）、G（插件）、质量
 - **里程碑**：M5
@@ -7746,7 +7757,9 @@ eleven-tool-round desktop paths are verified by
 
 - **前提条件**：对话中有一个粘贴到会话临时目录的 MP4，以及两个没有后缀、按内容哈希存储的 MP4 附件；后两者分别大于 512 KiB 和小于该上限，三者均保留 `video/mp4` 元数据。
 - **步骤**：点击每个对话附件，再在宿主文件选项卡选择“用系统默认应用打开”。对工作区内的 `.mp4` 文件重复操作。
-- **预期**：大附件提示体积超过内嵌预览上限，小附件提示二进制内容；二者均有系统打开操作。宿主校验真实路径包含范围，并为无后缀 blob 提供指向原始字节的 `.mp4` 别名。允许范围外的文件和符号链接逃逸均被拒绝；系统打开失败会提示用户。
+- **预期**：大附件提示体积超过内嵌预览上限，小附件提示二进制内容；二者均有系统打开操作。
+  宿主校验现存本地路径，并为无后缀 blob 提供指向原始字节的 `.mp4` 别名。外部本地文件
+  可按本地用户策略打开，远程和插件范围保持受限；系统打开失败会提示用户。
 - **链接规格**：`03-runtime/01-ipc-protocol.md` § fs、`04-ux/09-interaction-patterns.md` §8a.2
 - **验收**：C（对话和直播）、质量、安全
 - **里程碑**：M5
@@ -7799,13 +7812,13 @@ eleven-tool-round desktop paths are verified by
 
 #### E2E-187：历史附件与本地 Markdown 图片内联显示
 
-- **前提条件**：工作区含 `docs/pixel.png` 的 Agent 会话。用户曾粘贴图片，会话 JSONL 存有带 mimeType 的 `attachments/<sha256>` 图片引用。
-- **步骤**：
-  1. 重新打开该会话。确认粘贴图片与其它附件一样是芯片、接在正文之后而不是排在正文上方，悬停或聚焦时浮出预览小卡。
-  2. 点击芯片。确认宿主文件查看器打开该附件引用并显示图片。
-  3. 发送一回合，助手 Markdown 含 `![](docs/pixel.png)` 和 `![](/etc/passwd)`。确认工作区图片内联显示，工作区外路径不加载文件字节。
-  4. 确认 `fs/readImageDataUrl` 在 `ref: "/etc/passwd"` 且 `mimeType: "image/png"` 时返回 `missing`，而不是 data URL。
-- **预期**：受限图片引用在 5MB 上限内内联显示；工作区外路径与对非图片扩展名的 mime 伪造保持关闭；点击已解析图片芯片打开宿主 `file:` 选项卡，而不是系统默认应用。
+- **前提条件**：Agent 会话的工作区含 `docs/pixel.png`，工作区外有合成图片，另有非图片
+  `notes.txt`；会话 JSONL 保存带 mimeType 的 `attachments/<sha256>` 图片引用。
+- **步骤**：重新打开会话并查看图片芯片及悬停预览；分别在内置和系统文件打开偏好下点击。
+  发送包含工作区图片、外部本地图片和非图片文件的 Markdown，检查内联渲染；对非图片文件
+  伪造图片 MIME 调用 `fs/readImageDataUrl`，并检查远程和插件范围。
+- **预期**：工作区内外的本地图片均在 5MB 上限内内联显示；非图片扩展名不能因伪造 MIME
+  返回图片字节。点击图片遵循所选文件打开目标；远程和插件读取仍受各自范围限制。
 - **链接规格**：`03-runtime/01-ipc-protocol.md`、`04-ux/08-component-spec.md` §8.3、ADR 0172、`08-meta/decisions-log.md`（D334）
 - **验收**：C（对话与流）、D（工作区）、安全、质量
 - **里程碑**：M5
@@ -10225,3 +10238,85 @@ PluginPack 产物的解包目录，仅用于开发验证。验收 #1711 前需�
   event/result agreement, batch rejection and delegate restoration.
 - **Status**: Automated offline; native UI clicking and live providers are
   outside this fixture's coverage.
+
+## 电脑操作（ADR 0342）
+
+电脑操作在所有平台暂时不可用：Host 使用不支持的后端，不能签发原生授权或派发输入。
+`computer::tests::native_computer_use_is_temporarily_unavailable` 覆盖这一安全闸门。
+下列 [电脑操作](/zh-CN/spec/03-runtime/computer-use) 场景是未来启用前的落地闸门，
+并不表示当前已提供原生控制；状态均为 `NOT RUN`。
+
+### E2E-COMPUTER-USE-grant-is-user-minted-and-revocable
+
+- **前置条件**：隔离的桌面 profile，电脑操作已开启，被测平台的操作系统权限已授予，
+  一个 fixture 目标应用，无需 Provider 账号。
+- **步骤**：在没有任何授权时请求 Agent 操作目标。通过挑选器签发授权，执行
+  `describe_scope`、`inspect` 与一次 `act`。任务进行中按下指示器的"停止"。在第一个
+  授权仍活动时从另一个会话签发第二个授权。让授权空闲超过过期时间，并耗尽动作预算。
+- **预期**：首个请求以 `COMPUTER_NO_GRANT` 失败，不触发操作系统提示也不截取画面。
+  授权出现在指示器中并标明目标、预算与截取模式，应用退到后台时仍可见。"停止"立刻
+  终止剩余步骤。第二个授权以 `COMPUTER_GRANT_IN_USE` 被拒。空闲过期与预算耗尽各以
+  自己的错误码关闭授权，且没有授权能活过重启。
+- **规格**：[电脑操作](/zh-CN/spec/03-runtime/computer-use)、
+  [03-tools-and-permissions](/zh-CN/spec/03-runtime/03-tools-and-permissions)。
+- **状态**：NOT RUN —— 需要真机运行。
+
+### E2E-COMPUTER-USE-self-target-and-secure-input-refused
+
+- **前置条件**：隔离的桌面 profile，已有活动授权，一个带待处理审批卡片的
+  PI-Desktop 窗口，以及一个包含密码字段的 fixture 窗口。
+- **步骤**：在包括 `auto` 的每种权限模式下、以及在 `autonomous-in-scope` 授权下，
+  尝试对 PI-Desktop 窗口（含审批卡片与实时语音悬浮件）做检查、截取与动作。让密码
+  字段获得焦点，尝试 `inspect`、`screenshot` 与 `set_value`。尝试一个位于内置凭据
+  拒绝名单上的目标，并尝试移除该条目。
+- **预期**：每次自我目标尝试都以 `COMPUTER_SELF_TARGET_REFUSED` 失败；没有任何
+  合成事件到达任何 PI-Desktop 窗口，也没有审批卡片被关闭。安全输入以
+  `COMPUTER_SECURE_INPUT_REFUSED` 拒绝截取与合成，字段内容不出现在快照、图像、
+  工具结果或日志中。内置拒绝名单条目无法移除。
+- **规格**：[电脑操作](/zh-CN/spec/03-runtime/computer-use)、
+  [05-security/01-security](/zh-CN/spec/05-security/01-security) §13。
+- **状态**：NOT RUN —— 需要真机运行。
+
+### E2E-COMPUTER-USE-stale-basis-and-revision-fail-closed
+
+- **前置条件**：隔离的桌面 profile，一个 `a11y-and-pixels` 授权，以及一个可按需
+  移动、改变尺寸与改变层叠顺序的 fixture 窗口。
+- **步骤**：先 `screenshot`，移动目标，再基于过期 `basis` 动作。在对某个 `uid` 的
+  `inspect` 与 `act` 之间改变目标尺寸。用超出测得边界的坐标动作。用另一个授权签发的
+  `basis` 动作。在 `a11y-only` 授权下用坐标动作。
+- **预期**：分别返回 `COMPUTER_STALE_BASIS`、`COMPUTER_STALE_REVISION`、
+  `COMPUTER_SCOPE_VIOLATION` 与 `COMPUTER_CAPTURE_UNAVAILABLE`；其中任何一种都不
+  派发事件，不静默夹取，目标应用观察不到任何输入。
+- **规格**：[电脑操作](/zh-CN/spec/03-runtime/computer-use)、
+  [08-error-codes](/zh-CN/spec/03-runtime/08-error-codes) §3.10。
+- **状态**：NOT RUN —— 需要真机运行。
+
+### E2E-COMPUTER-USE-voice-request-cannot-mint-a-grant
+
+- **前置条件**：隔离的桌面 profile，带绑定工作会话的实时语音 fixture 适配器，电脑
+  操作已开启但没有活动授权，无真实 Provider 账号与麦克风。
+- **步骤**：口述一条要求 Agent 操作某个应用的请求。在用户于桌面 UI 签发授权后重复。
+  在会话处于 Plan 与 Goal 时分别重复。
+- **预期**：首个请求产生的是桌面 UI 的授权请求而不是授权：卡片出现在主窗口，通话条
+  提示应用需要关注，用户决定之前不发生截取或合成。授权存在后，该请求作为普通 Agent
+  轮次在会话策略下运行，进度通过现有工作反馈通道朗读。Plan 与 Goal 在权限评估之前
+  拒绝该工具。
+- **规格**：[电脑操作](/zh-CN/spec/03-runtime/computer-use)、
+  [live-voice](/zh-CN/spec/03-runtime/live-voice)、
+  [live-work-session](/zh-CN/spec/03-runtime/live-work-session)。
+- **状态**：NOT RUN —— 需要真机运行。
+
+### E2E-COMPUTER-USE-platform-support-is-explicit
+
+- **前置条件**：每个受支持平台各跑一次，另加一个 Wayland 会话，以及一台操作系统
+  权限被拒绝的机器。
+- **步骤**：在每个平台上开启该功能并打开体检视图。签发授权并动作。在 Windows 上以
+  由更高完整性级别进程拥有的窗口为目标。在 Wayland 上先尝试输入再尝试截取。在屏幕
+  录制或无障碍被拒绝的平台上尝试检查与截取。
+- **预期**：体检视图区分"未申请"、"已拒绝"与"本平台不支持"。Wayland 上的输入以
+  `COMPUTER_PLATFORM_UNSUPPORTED` 失败而门户截取仍可用；提权的 Windows 目标以
+  `COMPUTER_TARGET_ELEVATED` 失败而不是丢弃事件；被拒绝的操作系统权限以
+  `COMPUTER_OS_PERMISSION_MISSING` 失败。没有路径挂起，也没有路径在未动作的情况下
+  回报成功。
+- **规格**：[电脑操作](/zh-CN/spec/03-runtime/computer-use)。
+- **状态**：NOT RUN —— 需要真机运行。

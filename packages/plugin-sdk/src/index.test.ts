@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   pluginMcpToolKey,
   pluginSkillId,
@@ -14,9 +14,14 @@ import {
   PLUGIN_PERMISSIONS,
   PLUGIN_VIEW_ICONS,
   type PluginProviderContrib,
+  type PluginSessionGetResult,
 } from "./index.js";
 
 const base = { schemaVersion: 1, id: "demo.x", name: "X", version: "0.1.0", main: "main.js" };
+
+it("retains the session source in the public result contract", () => {
+  expectTypeOf<PluginSessionGetResult>().toHaveProperty("source").toEqualTypeOf<string>();
+});
 
 describe("validateManifest", () => {
   it("accepts and resolves English/Chinese panel titles", () => {

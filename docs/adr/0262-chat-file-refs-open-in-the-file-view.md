@@ -35,8 +35,9 @@ automatic HTML browser destination: HTML now follows ordinary file opening,
 while its Open with submenu retains explicit browser choices.
 
 The [local user-file amendment](user-local-file-access.md) additionally admits
-exact paths outside project/store roots for local desktop actions. Those files
-use the host viewer. Shorthand search and remote/plugin containment stay scoped.
+exact local files and directories outside project/store roots for desktop user
+actions, including image reads. Built-in viewing uses the host viewer for
+external files. Shorthand search and remote/plugin containment stay scoped.
 
 1. **Completion runs in Electron main**, as `fs.resolveRef`, because only main
    sees both the open project and the session's own scratch store
@@ -58,23 +59,23 @@ use the host viewer. Shorthand search and remote/plugin containment stay scoped.
      searched;
    - a reference that matches nothing opens **nothing** and reports itself. No
      empty panel, no blank browser page.
-2. **The destination follows where the reference resolved.** A project file
-   opens in the `pi.file-manager` view, except a positioned reference (`:line`,
-   `:line:column`, `:line-range` or `#Lline[-Lend]`), which opens in the host's
-   read-only `file:` tab so the requested source line can
-   be brought into view. The bundled view accepts opaque path locations and has
-   no line-navigation contract; this keeps the path unchanged and uses the
-   host viewer's existing scroll support. A file in the session scratch or
+2. **The configured destination applies to files and directories.** Under the
+   built-in preference, a project file opens in the `pi.file-manager` view,
+   except a positioned reference (`:line`, `:line:column`, `:line-range` or
+   `#Lline[-Lend]`), which opens in the host's read-only `file:` tab so the
+   requested source line can be brought into view. The bundled view accepts
+   opaque path locations and has no line-navigation contract. A file in the session scratch or
    attachment store, or an external local file, opens in the
    host `file:` tab, because it lives outside that view's project root — see
-   point 4. HTML follows the same file-opening preference and source viewer
-   rules. Its Open with submenu can explicitly select File Manager, built-in
+   point 4. System mode opens files with their associated application and
+   directories in the system file manager. HTML follows the same file-opening
+   preference and source viewer rules. Its Open with submenu can explicitly select File Manager, built-in
    browser, or default browser for one click. Main resolves browser roots from
    the owning session, never a different visible project's root. The resolved
    absolute path is carried through navigation under the local user-file policy.
    Positioned HTML references retain the source viewer. A disabled browser
    reports an error instead of silently dropping a click or enabling itself.
-   A direct user click on a project file actively ensures
+   A direct user click using the built-in project file destination actively ensures
    the bundled file view is running: an off plugin is enabled, and an enabled
    plugin with no contributed view is reloaded before the tab opens. This click
    is explicit intent to use the bundled view. The host does not restore a
@@ -123,11 +124,10 @@ use the host viewer. Shorthand search and remote/plugin containment stay scoped.
   when, the host asks it for a path the host itself picked. A defect in that
   path handling is not caught by the host gateway; that is the same trust
   position ADR 0241 already took, extended by one explicitly-named case.
-- A chat click no longer hands a file to the OS default application. That action
-  is still reachable from the file view's own context menu.
-- `fs.resolveRef` is a new renderer-facing channel. `fs/open` (ADR 0163) remains
-  part of the IPC surface; the transcript is simply no longer one of its
-  callers.
+- A chat click follows the file-opening preference; the system default
+  application is available as the configured destination.
+- `fs.resolveRef` is a renderer-facing channel. `fs/open` (ADR 0163) remains
+  available and is used by the transcript when the system destination is chosen.
 
 ## Alternatives considered
 
@@ -159,11 +159,11 @@ file".
 
 ### Route workspace HTML through the file view for agent replies
 
-Rejected: the file view renders a page as source. ADR 0163 chose the browser for
-the same reason, and one contract is easier to reason about than two.
+Originally rejected in favor of the browser. The configurable file-opening
+amendment now routes HTML through the ordinary file preference, with explicit
+browser choices retained in Open with.
 
 ### Keep the OS default application as the destination
 
-Rejected: it is not the right panel, and it is what the request replaces. The
-action survives in the file view's context menu, which is where the file is
-already on screen.
+Originally rejected as the sole destination. The configurable file-opening
+amendment restores it as an optional destination for files and directories.

@@ -950,18 +950,27 @@ thinking never creates an empty wrapper. All three modes render exactly one
 top-level process disclosure and change neither what a tool received nor what is
 stored.
 
-Every ordinary group of a turn stays open while that turn is active, whether or
-not it still owns the live execution segment, so work never folds away mid-run.
-After the turn settles, ordinary groups with at most four visible items remain
-open, larger groups start closed, and Task topology groups remain open. A group
-that still renders a Thinking row also remains open: with `Show thinking` on the
-reasoning is content the reader asked to see, and folding the group around it
-would make the setting look broken. These defaults are unified across modes and
-otherwise do not depend on the thinking preference. Explicit user choices remain
-authoritative. Group headers summarize count, running state and issue count
-without treating a failed child as a failed turn; the issue counter is one inline
-non-wrapping chip whose icon and localized count share a centred line and
-truncate together when the band runs out of width.
+Every group of a turn stays open while that turn is active, whether or not it
+still owns the live execution segment, so work never folds away mid-run. Once the
+turn settles both nested levels fold: expanding a completed turn lists what the
+agent did instead of a wall of rows, and two opt-out switches carry the reader's
+choice. `Auto-fold finished groups` (`autoCollapseSettledGroups`, on by default)
+folds settled groups whatever their size; turned off it leaves every settled
+group open, because the four-item tier is retired. `Auto-fold finished thinking`
+(`autoCollapseThinking`, on by default) keeps only reasoning the live turn is
+still streaming expanded. Each switch is a sub-row of the setting that gates it
+(`Show thinking`, and a non-flat `Transcript display`), it disappears with that
+parent, and hiding it never rewrites the stored value. A group does not inherit
+open state from the reasoning it contains: the group and its Thinking rows each
+answer to their own switch, so closing a group hides expanded reasoning inside
+it. Explicit user choices remain authoritative, and a running turn - or a group
+that still owns a running tool or delegation - never folds. The group header
+states what the group did: the actions it contains, joined with the locale's own
+list wording and capped at three with "and more", followed by the call count as
+its own non-truncating token (`搜索并读取文件 · 12 次操作`). Reasoning is named in
+that sequence but never counted as an operation, and a reasoning-only group
+counts steps instead. Failures are not repeated here: the tool row that failed
+already reports them.
 
 The turn disclosure header states the turn's outcome and carries only its bounded
 metadata: status, recorded duration and direct tool/search count. It never echoes
@@ -982,15 +991,15 @@ collapse rail in that gutter. The rail stays invisible at rest, shows a 2px bar 
 hover or focus, and collapses the group when clicked. The outer turn fold adds no
 extra hierarchy.
 
-Except for the display mode's Thinking default, no item payload opens itself: a
-tool, hosted-search or plan call stays a header row until the user opens its
+Except for `Auto-fold finished thinking`, no item payload opens itself: a tool,
+hosted-search or plan call stays a header row until the user opens its
 disclosure, including a Bash row, whose detail stays closed until the user opens
-it. Groups stay open while their turn runs; after it settles, small groups (up to
-four visible items), Task topology groups and groups that still render a Thinking
-row remain open, while larger ordinary groups of plain tool rows start closed.
-With `Show thinking` on, Thinking rows expand by default in every display mode and
-collapse only on user action. An expanded Thinking row shows its full reasoning
-markdown; a collapsed one shows only the Thinking indicator, with no summary or
+it. Groups stay open while their turn runs and fold once it settles, so a
+settled process reads as a list of headings that each state composition and
+count.
+With `Show thinking` on, the live reasoning row starts expanded; finished rows
+start folded unless `Auto-fold finished thinking` is off or the user opens them.
+An expanded Thinking row shows its full reasoning markdown; a collapsed one shows only the Thinking indicator, with no summary or
 excerpt. With `Show thinking` off, no completed reasoning row renders; only a live
 whole-run TextShimmer `Thinking` indicator remains while reasoning is actively
 streaming, and empty thinking-only containers are omitted. The stored reasoning is
@@ -1713,11 +1722,10 @@ storage but compose into one assistant turn until the next user message.
   default scale). User messages retain their real hover-action row and normal
   spacing, including before the first assistant output. Opacity hides those
   buttons without removing their space, so hover does not shift content.
-- Toggle Thinking disclosure: expand/collapse reasoning independently from the
-  final answer. With `Show thinking` on, every visible reasoning row starts
-  expanded and stays so after the turn settles unless the user collapses it. The
-  expanded content's left rule is itself a pointer and keyboard-focusable
-  collapse control.
+- Toggle Thinking disclosure independently from the final answer. With `Show
+  thinking` on, live reasoning starts open; finished reasoning follows the
+  `Auto-fold finished thinking` preference or the user's explicit choice. The
+  expanded content's left rule is a pointer and keyboard-focusable collapse control.
 - Hover code block: copy button appears
 - Click a transcript file reference with `:line[:column]`: resolve the file
   first, then open it in the host `file:` tab and scroll the requested line into
@@ -1943,22 +1951,20 @@ Single message render — either user (plaintext) or assistant (markdown streami
   any of these discards old results and cancels queued work. Newly created
   files are reconsidered when the message remounts or its scope changes, not
   by polling. Non-ASCII filenames, spaces, and Windows drive/backslash paths
-  remain whole candidates. User-message paths outside the allowed roots stay
-  plain after verification, while assistant references and tool paths remain
-  clickable so the opener can explain the access limit. Home paths stay plain.
-  Clicking a chip
-   completes the reference through `pi-desktop/fs/resolveRef` — the whole open
-   project is searched, its group's folders primary first (ADR 0263) — and opens
-   where it resolved: a project file in the bundled `pi.file-manager` work-panel
-   view (the host `file:` tab when that view is unavailable), a session-scratch
-   or attachment file in the host `file:` tab, and a `.html`/`.htm` page of the
-   primary folder in the side browser. A primary-folder file is addressed to the
-   view as a project-relative path and a sibling-folder file as an absolute one,
-   which is also how scratch and attachment files are addressed. A resolved
-   image chip resolves and opens the same way. A chip whose reference
-   matches nothing opens nothing and reports itself; an absolute path outside
-   every allowed root reports the access limit separately. The OS default application
-   is no longer what this click does.
+  remain whole candidates. Exact local paths can resolve outside managed roots;
+  bare prose recognition remains conservative. Clicking a chip completes the
+  reference through `pi-desktop/fs/resolveRef` and follows the unified file and
+  directory destination preference. In built-in mode a project file opens in the
+  bundled `pi.file-manager` work-panel view (or the host `file:` tab when the
+  view is unavailable); session-scratch, attachment and external local files
+  open in the host viewer, and directories use the host Files tree. HTML follows
+  that preference as source, with explicit browser choices in Open with.
+  System mode uses the OS default application or file manager. Positioned
+  references retain line navigation in built-in viewing. A primary-folder
+  file is addressed project-relative and a sibling-folder file by absolute
+  path. A resolved image chip uses the same opener. A reference that matches
+  nothing opens nothing and reports itself. Remote workspace references retain
+  their scoped policy and do not gain local application actions.
   HTTP(S) URLs remain inline text links. Bare URLs preserve balanced parentheses
   in paths, queries, and fragments; an unmatched closing parenthesis wrapping
   the URL in prose stays outside the link. Sentence punctuation immediately
@@ -1976,18 +1982,15 @@ Single message render — either user (plaintext) or assistant (markdown streami
   and copying that selection keeps the URL, even though the link is a button
   and chrome buttons are otherwise unselectable.
 - Assistant: transparent surface, left-aligned, markdown rendered at full
-  content width. Workspace file paths in that markdown are previewable:
-  inline code, markdown links, and bare path tokens (with a known
-  extension) complete and open like a chip against every folder of the open
-  project (ADR 0263): the resolved file in the bundled
-  `pi.file-manager` view (the host `file:` tab without it), a `.html`/`.htm`
-  page of the primary folder in the side browser, and nothing plus a report when
-  the reference matches no file. Local markdown images render
-  inline via the same contained data-URL channel, with a chip fallback.
-  Unprefixed relative paths
-  resolve from the workspace root; `./` and `../` resolve from the workspace
-  root in chat, and from the viewed file's directory when previewing a
-  markdown document in the files tab. Parent escapes stay inert.
+  content width. File paths in that markdown are previewable: inline code,
+  markdown links and recognized bare path tokens complete and open like a chip,
+  following the same file/folder destination preference. Explicit local paths
+  may address existing files or directories beyond project roots; unresolved
+  references report failure without opening a different file. Local markdown
+  images, including external local images, render through the bounded data-URL
+  channel with a chip fallback. Relative chat paths use the workspace as base;
+  paths in a viewed markdown file use that file's directory. Remote and plugin
+  consumers retain their own scoped access policies.
 - Thinking: separate lightweight disclosure above the answer with no card
   background or outer border. Its Sparkles/chevron trigger uses secondary text,
   and the expanded markdown is indented by a subtle theme-token left rule. It
@@ -2435,22 +2438,17 @@ as its own row beside them, and a progress message or command ends a group. With
 `flat`, no group renders and the rows keep transcript order inside the outer
 disclosure. A singleton uses its item disclosure directly, and Task topology
 keeps its existing container. A Bash-only turn still has its one disclosure.
-While the turn is active, its ordinary group opens. After completion, ordinary
-groups with at most four visible items remain open; larger groups start closed,
-and Task topology groups remain open. These group defaults do not depend on the
-thinking preference. No item payload opens itself, except the display mode's
-Thinking default: a tool, hosted-search or plan row stays a header row until the
-user opens it, whichever item of the group it is, including a Bash row whose
-detail stays closed until opened.
+While the turn is active its groups stay open. After completion the
+`Auto-fold finished groups` preference controls their default regardless of
+size; individual user choices remain authoritative. Tool, hosted-search, plan
+and Bash payloads stay closed until opened; reasoning follows its separate
+`Auto-fold finished thinking` preference.
 
-The group header shows `Processing · 12s` while active or `Processed for 12s`
-after completion, plus bounded item and issue counts. Expanding it reveals the
-ordered activity rows and their independent result disclosures. A failed child
-remains an error on its own ToolCallRow but does not make the group or whole turn
-terminally failed; terminal agent errors remain owned by the assistant error or
-TurnOutcomeCard surface. A user action on a group, item, or collapse rail claims
-that level and its containing group without toggling them, so streaming and completion
-never reverse the chosen state or close around focused/selected content.
+The group header summarizes its action types and operation count; reasoning is
+named but not counted as an operation, and failures remain on their own rows.
+Expanding it reveals ordered activity rows and independent result disclosures.
+Explicit choices affect only their own levels, while focus or selection inside a
+level temporarily defers automatic closing of that level and its ancestors.
 Elapsed labels use compact automatically carried units: seconds below one
 minute, minutes plus seconds below one hour, and hours plus minutes (and
 seconds when non-zero) from one hour onward. Zero-value units are omitted, so
@@ -2469,15 +2467,12 @@ seconds when non-zero) from one hour onward. Zero-value units are omitted, so
 
 - The leading Lucide icon reflects the action type: file, folder, search,
   edit, terminal, web, or generic tool.
-- A multi-item group header owns elapsed time plus item and issue counts and stays
-  in the transcript after completion. Active groups stay open; after completion,
-  groups with at most four visible items and Task topology groups remain open,
-  while larger ordinary groups start closed. These defaults do not depend on the
-  thinking preference. A singleton has no group header.
-- Tool/search payloads stay collapsed until the user opens them; no tool/search
-  row auto-opens, so a final thinking item never selects an earlier tool. With
-  `Show thinking` on, reasoning rows open by default in every display mode and
-  never open sibling payloads.
+- A multi-item group header names its actions and operation count. Active groups
+  stay open; completed groups follow `Auto-fold finished groups` regardless of
+  size. A singleton has no group header.
+- Tool/search payloads stay collapsed until opened. With `Show thinking` on,
+  live reasoning starts open; finished reasoning follows `Auto-fold finished
+  thinking`. Reasoning never opens sibling payloads.
 - `Bash` and run rows are revealed by the turn's process disclosure. In
   `fully-folded` they sit inside their group; in `command-first` they sit at its
   top level beside the groups with adjacent rows separate; in `flat` no groups
@@ -2556,7 +2551,7 @@ twice.
 | State | Header treatment | Expanded content |
 |---|---|---|
 | Running | Progressive action with readable text and a pulsing marker; a `run` row also shows its spinner and pulses the status dot beside `Working…` | The active multi-item group opens; no tool/search payload opens itself, except the display mode's Thinking default; live thinking follows its own indicator/disclosure policy |
-| Success | Past-tense action + result chips; no green success badge, except a `run` row's dot and `Done` | Result blocks, then arguments if not already shown; small groups and Task topology groups stay open, large untouched ordinary groups close, and manual group and item choices are retained |
+| Success | Past-tense action + result chips; no green success badge, except a `run` row's dot and `Done` | Result blocks then arguments; settled group defaults follow the auto-fold preference, and explicit choices are retained |
 | Error | Past-tense action + compact danger status; details remain collapsed by default and open only on user request. A `run` row is in this state whenever its command exited nonzero, whatever the call reported (D227) | Error note first, then arguments |
 | Denied | Muted `Denied` status; payload remains closed until requested | Permission result when available |
 
@@ -2576,19 +2571,15 @@ twice.
   ADR 0263). Such a click opens the file instead of toggling the row's
   disclosure, and a reference that matches nothing reports itself without
   opening a panel. A tool surface picks no destination of its own.
-- Click the processing header: expand/collapse only that ordered activity list.
-  Active groups stay open; after completion, ordinary groups with at most four
-  visible items and Task topology groups remain open, while larger ordinary
-  groups start closed. Opening a group does not expand every item, and sibling
-  groups remain independent.
-- Click or keyboard-activate the left rule beside expanded thinking, tool details,
-  delegated work, or processing steps: collapse that owning disclosure without
-  changing adjacent expansion state. Item interaction also claims its containing
-  group as user-owned without toggling it; automatic stream or completion
-  transitions never reverse those states.
-- A failed child row remains error-hued and reports its failure in the row header,
-  but its payload is not auto-expanded. The containing group settles as
-  `Processed for {elapsed}` with an issue count even when a later tool recovered.
+- Click the processing header to expand or collapse only that ordered activity
+  list. Active groups stay open; settled group defaults follow `Auto-fold
+  finished groups`. Opening a group does not expand every item and sibling groups
+  remain independent.
+- Click or keyboard-activate the left rule to collapse that owning disclosure
+  without changing adjacent expansion state. Explicit choices stay local; focus
+  or selection temporarily protects the owning level and its ancestors.
+- A failed child reports its error in its own row without auto-expanding the
+  payload. The group header summarizes actions and count, not an issue count.
   Expansion uses a short height/opacity transition and keeps collapsed content inert.
 - Running updates replace the latest partial output in place. Bash's cumulative
   `details.output` partial result is rendered through the stdout channel, while
@@ -2597,8 +2588,8 @@ twice.
   not parse or rerender on streaming ticks.
 - Results are presented before arguments so the primary result has higher
   information priority.
-- File paths and Grep hit headings open in the work panel when they resolve
-  under the workspace root; paths outside it stay plain text.
+- File paths and Grep hit headings use the shared file opener and selected
+  destination, including valid external local paths; remote/plugin scopes remain separate.
 - Host truncation markers remain visible and cannot be bypassed by expansion.
   Rendered lists and diffs are capped and report the hidden remainder.
 - Syntax highlighting is skipped above 100 KB or 800 lines.
@@ -3751,8 +3742,8 @@ Anatomy:
   the close button, or a blank-area click dismisses it and restores the prior
   input focus/caret. Focus remains inside the modal, and native plugin surfaces
   are hidden while it is open. The remove button never opens or submits.
-  Preview cards and the modal use the bounded, contained `fs/readImageDataUrl`
-  bridge, including allowed scratch files when no project is open. Missing,
+  Preview cards and the modal use the bounded `fs/readImageDataUrl` bridge,
+  including local external and scratch images when no project is open. Missing,
   unsupported, oversized, or undecodable images show a retry state and retain
   the draft. Session/project changes or removal of the selected attachment
   dismiss the preview; late reads cannot replace a newer image.
@@ -3761,15 +3752,16 @@ Anatomy:
 - Sent `@path` file references (quoted or unquoted) render as the same compact
   leaf-name chip as the draft. Clicking one completes the reference through
   `pi-desktop/fs/resolveRef` — against the whole open project, its group's
-  folders primary first (ADR 0263) — and opens where it resolved: a project file
-  in the bundled `pi.file-manager` view (the host `file:` tab when that view is
-  unavailable), a session-scratch or attachment file in the host `file:` tab.
+  folders primary first (ADR 0263) — and follows the file-opening preference:
+  under built-in viewing a project file uses `pi.file-manager` (or the host
+  `file:` tab when unavailable); scratch, attachment and external files use the
+  host `file:` tab. Local exact paths can also resolve directories.
   HTML uses those same destinations. The unified file/folder preference can
   instead choose the OS default application for any file, including HTML, or
   the system file manager for directories. Built-in directory links browse the
   host Files tree. HTML's Open with submenu remains a single-click override. A
-  positioned `path:line` reference uses the host read-only `file:` tab and
-  scrolls the requested line into view. A
+  positioned `path:line` reference in built-in mode uses the host read-only
+  `file:` tab and scrolls the requested line into view. A
   primary-folder file is addressed to the view as a project-relative path and a
   sibling-folder file as an absolute one, which is also how scratch and
   attachment files are addressed. A reference that matches no file opens nothing
@@ -4657,3 +4649,67 @@ Input, selection, submission and dismissal semantics remain unchanged.
 Project-delete descriptions and plugin dialog headings/outcomes also wrap long
 project or plugin names instead of overflowing their existing widths. Project
 instructions, memory and OAuth dialogs retain their existing bounded layouts.
+
+## Round review reader
+
+Local Review defaults to Last round (the latest modified user round). Its
+scope dropdown also offers History, which reveals a separate user-round selector row,
+independent of the chat's loaded message window. Rounds without changes do not
+replace Latest. Main and delegated Write/Edit evidence share a file list; actual
+execution roots distinguish identically named files. The file header opens all
+of that file's recorded operations in order, without claiming a net diff.
+
+Expanded file content has no fixed-height inner viewport or vertical scrollbar.
+The outer Review scroll owns vertical travel; the current file header sticks
+below the toolbar within its file section. It is not reordered. A borderless ellipsis button after the summary totals opens a menu containing
+only Word wrap and Context lines. Hovering Context lines opens a secondary
+menu with 1/3/5 (first-use default 3); the choice is profile-wide, remembered
+across sessions, panel reopening and application restarts. Invalid or missing
+preferences use 3, and unavailable storage never blocks the current selection.
+No context selector is shown in the main toolbar.
+Toggle checks appear on the right. History options show date/time on the left
+and Host-recorded added/deleted line totals on the right, before the check.
+Totals count each successful native operation once, including delegated evidence,
+and do not claim a net diff. Binary, originally truncated or missing counts show
+unknown instead of invented zeros. The selector reserves arrow space. File headings have no permanent
+button fill or border; execution roots are not rendered as extra diff rows.
+A separate file ellipsis offers Open internally (disabled without the loaded
+File Manager view; never auto-enables it), Open externally (OS default app),
+and Open folder (system file manager, revealing the current file).
+All three resolve the current exact file through session-aware authorized roots, not
+a historical export or a same-named fallback. Stale session/project results are
+discarded; lookup/open failures are visible without changing stored evidence.
+Absolute and outside-root relative path labels use `.../basename`; full paths
+remain in the title and stored evidence. Native review captures successful
+approved Write/Edit mutations inside and outside the workspace, never Bash or
+external-application changes. Outside snapshots do not grant rollback or general filesystem permissions.
+Their file menu omits internal open and offers only external open and folder
+reveal through explicit snapshot-bound user actions (ADR 0341). Other file-open
+surfaces retain their existing authorization.
+
+Both scope and historical round selectors reuse the shared native Select.
+Review-only CSS opts into Chromium's customizable native picker: its base follows
+the sidebar color, with a contrasting sidebar-derived selected fill (no system
+blue). Only the first option's upper and last option's lower corners are rounded;
+interior edges are square, including when an interior row is selected or hovered.
+A single option has all four outer corners. The scope trigger is 24px high; the
+round field stays 28px high. Both vertically center their text and arrow. Round
+labels retain date/time and recorded counts with reserved arrow space. Native keyboard selection,
+Escape dismissal and focus remain browser-owned. Shared primitives and the AI
+Command shell selector are unchanged.
+Only file action menus opt into compact density. Recorded operations have no
+numbered title or dividing rule. One footer per file copies all its recorded
+hunks or requests a Host-preflighted file rollback; chat's inline actions remain
+unchanged. The copied sequence is not represented as a net diff.
+Review headings and turn-summary file rows share compact 14px file-type glyphs
+(Markdown, JSON, Python, code and document), while status stays in accessible
+labels. Both Review ellipsis menus anchor to the trigger right edge, 4px below;
+when space is insufficient they flip above and clamp within the viewport.
+Pointer position within a button cannot move the menu. They remain body portals,
+and ordinary right-click menus retain pointer placement.
+Diff rows have one line-number gutter: deletions use old coordinates, additions
+and context use new coordinates; EOF markers have no number. Word wrap toggles wrapping without
+introducing nested vertical scrolling. Unsupported
+historical context has an explicit explanation and retains recorded evidence.
+Remote Review retains its existing presentation. Chat inline review rows retain
+their default layout and hash-guarded rollback; no Git or model behavior changes.

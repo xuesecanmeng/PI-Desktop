@@ -728,6 +728,47 @@ may be retained while exactly one workspace supplies the visible shell context.
   writes naming an unknown action are rejected by both the renderer and
   Electron Main.
 
+### 1.12 User-supplied startup animation (D679, ADR 0338)
+
+- A video in `<dataDir>/startup/` becomes the boot surface for that launch,
+  replacing the brand splash. An installation without that directory is
+  unchanged: same splash, same 420ms dwell, same 280ms fade.
+- The sequence is **play → black → reveal**. The video plays over opaque black
+  (`#000`, `object-fit: cover`, muted, no controls, not focusable); when it
+  ends, the same black layer stays as an opaque mask; once the shell has its
+  initial state, that mask fades out over 1000ms
+  (`--motion-startup-reveal`). The reveal waits for both the video and the
+  shell, so it never lands on a half-built window.
+- The mask stops taking input the moment the fade starts, so the shell, its
+  chrome, and the renderer-drawn window controls are operable for the whole
+  second rather than after it.
+- A boot that outlasts the video shows the splash's indeterminate bar after 3s
+  of black, so an opaque mask is not mistaken for a hang.
+- Either `loadeddata` or `playing` acknowledges a decoded first frame; a
+  playing video must not hit the missing-first-frame timeout when `loadeddata`
+  was missed. The first-frame timeout also checks the actual video ref for
+  HAVE_CURRENT_DATA in case both initial events raced their handlers. The total
+  playback bound remains active.
+- Four bounds end the animation, and each runs the same reveal: no first frame
+  within 2s, 15s of total playback, a `<video>` `error`, or `Escape`. The
+  startup watchdog's bounds are unchanged and outrank it — at 30s the boot
+  surface gains logs and diagnostics, and at 180s the recovery surface replaces
+  the animation, so a stalled launch is never left behind the mask.
+- Exactly one boot surface is mounted, ranked recovery > animation > brand
+  splash.
+- The animation plays once per launch, for the first window of the process:
+  reopening from the tray or the Dock replays nothing, and a renderer reload
+  does not replay it.
+- Settings → General → Appearance carries the switch (absent means on, so
+  dropping a file in is enough), a `skipWhenReady` sub-switch gated by it
+  (absent plays the video out), a status line naming the file the next launch
+  would play — or saying none was found — and an action that opens the folder,
+  creating it if needed. Both preferences are read before the window is
+  created, so a change applies on the next launch.
+- Discovery is deterministic: `webm` > `mp4` > `m4v` > `mov`, file name as the
+  tie-break, with dot-prefixed entries, non-files, empty files, files over
+  64 MB, and anything that resolves outside the directory excluded.
+
 ## 2. Streaming message behavior
 
 ### 2.1 Token rendering
@@ -1036,14 +1077,10 @@ may be retained while exactly one workspace supplies the visible shell context.
   hidden thinking does not create a redundant group, and existing Task topology
   remains separate. No mode adds a second top-level disclosure or leaves a run
   row outside the process.
-- Every ordinary group of a turn stays open while that turn runs, whether or not
-  it still owns the live segment. After the turn settles, ordinary groups with at
-  most four visible items, Task topology groups and groups that still render a
-  Thinking row remain open; larger ordinary groups of plain tool rows start
-  closed. Apart from visible reasoning these defaults do not depend on the
-  thinking preference. Closing the turn's disclosure hides every group and run
-  row under it without erasing their choices; reopening restores their defaults
-  and any explicit user choices.
+- Every ordinary group stays open while its turn runs. Once settled, its default
+  follows `Auto-fold finished groups` regardless of size; explicit choices stay
+  authoritative. Closing the turn's disclosure hides its groups and run rows
+  without erasing choices; reopening restores them.
 - The turn header reports `Failed`, `Stopped`, `Running`, or `Finished` in that
   precedence, names compaction and recovery while those stages are live, reads
   `Thinking` while the live step is reasoning, omits the duration when the
@@ -1051,14 +1088,17 @@ may be retained while exactly one workspace supplies the visible shell context.
   nested group header shares its left edge; the group body then indents child
   rows by 12px with the hover/focus collapse rail in that gutter, while a run
   row lifted out of a group keeps the turn's left edge.
-- No item payload opens itself, except the display mode's Thinking default: a
-  tool, hosted-search or plan call stays a header row until the user opens it,
-  including the literal final item of the last activity group. With `Show thinking`
-  on, Thinking rows default expanded in every display mode and collapse only on
-  user action. A collapsed row shows only the Thinking indicator, with no excerpt.
+- No item payload opens itself except reasoning: a tool, hosted-search or plan
+  call stays a header row until the user opens it, including the literal final
+  item of the last activity group. With `Show thinking` on, only the reasoning a
+  live turn is still streaming starts expanded; completed rows start folded and
+  open on user action, or stay open when `Auto-fold finished thinking` is off. A
+  folded row shows only the Thinking indicator, with no excerpt.
   With `Show thinking` off, no completed reasoning row renders; only a live
   whole-run TextShimmer `Thinking` indicator remains while reasoning streams.
   Stored reasoning is retained and reappears when the preference is turned back on.
+  A group and its reasoning answer to their own switches: neither inherits the
+  other's state, so folding a group hides the expanded reasoning inside it.
 - Activating a group or item header toggles only that level. Closing a parent
   preserves child state, reopening restores it, and sibling groups remain
   independent. Opening a parent is never an expand-all action.
@@ -1544,7 +1584,7 @@ Project drag/drop follows these patterns:
   it is binary or exceeds the text preview limit offers **Open with default
   application**. This applies to named `.mp4` files and extensionless
   attachment blobs carrying `video/mp4` metadata. A failed OS handoff shows an
-  error; the user can still reveal the contained file in the file manager.
+  error; the user can still reveal the validated local file in the file manager.
 - The same destination rule governs every other surface of the transcript that
   names a file, because one opener serves them all: clicking the file path in a
   tool row's summary (Read, Write, Edit, fetch) and clicking a path in a tool
@@ -1593,6 +1633,13 @@ Project drag/drop follows these patterns:
 ### 9.1 Transcript scrolling
 
 - Default: auto-scroll to bottom on new content during stream while pinned
+- Window growth and fetched earlier pages preserve the visible-message anchor
+  and its viewport offset when the mounted projection commits. The anchor remains
+  through late row layout; it is a message, not an enclosing answer/minimap group,
+  whose identity can change when earlier parts of an answer are prepended.
+  Further reader scrolling updates the anchor rather than being blocked. Search,
+  minimap and latest navigation, a new turn, pane hide or unmount release it so
+  a late page cannot undo explicit navigation or resumed bottom following.
 - The first upward scroll **gesture** (wheel / trackpad / touch / scrollbar /
   keyboard) pauses auto-scroll and shows the "↓ Scroll to bottom" button;
   queued stream or resize follow work must not reverse that movement
@@ -1616,7 +1663,6 @@ Project drag/drop follows these patterns:
   nested scroller (the delegate run dock, D302) holds its own position and passes
   the hold outward because growing it also grows the outer content.
   Search reveal opens the required ancestors at message precision and uses the
-  Search reveal opens the required ancestors and uses the precise target as the
   final anchor. Leaving follow for any disclosure is not a re-pin: the transcript
   stays where the reader put it, with jump-to-latest visible, until real scroll
   input, that control, a new turn or navigation releases the hold (D430).
@@ -1806,6 +1852,7 @@ This does not prevent state changes — it makes them instant.
 | Tool card expand/collapse | 200ms transition | instant toggle |
 | Hover state transition | 150ms background change | instant color change |
 | Startup splash | Brand splash + progress, min dwell then fade out | Instant static splash, no bar motion, instant reveal |
+| Startup animation (D679) | User's video, then a black mask, then a 1000ms reveal | Not played at all; the brand splash's reduced-motion path is used |
 | Dialog / search enter | overlay-in + surface-in via motion tokens | Near-zero duration enter |
 | Scroll-to-bottom button fade-in | 150ms opacity | instant appear |
 | Toast slide-in | 200ms slide | instant appear |

@@ -1,3 +1,4 @@
+import type { ReviewContextLines, ReviewContextResult, ReviewTurnsPage, ReviewChangesPage } from "@pi-desktop/shared";
 import { projectPlanHistory } from "./plan-history";
 import { guardRemoteInvocation } from "./remote-ipc-safety";
 import { isRemoteSession, safeSessionSummary } from "./remote-session-safety";
@@ -31,6 +32,8 @@ import type {
   PendingInteractiveRequests,
   AgentInstructionFile,
   AppSettings,
+  StartupAnimationDescriptor,
+  StartupAnimationStatus,
   JevKeyCheckResult,
   CommandShellCatalog,
   AppVersionInfo,
@@ -338,6 +341,11 @@ declare global {
       platform: NodeJS.Platform;
       /** Authoritative OS locale passed from the main process at window creation. */
       locale?: string;
+      /**
+       * Boot animation the main process resolved for this window, or null to
+       * keep the brand splash. Available before the first paint (D679).
+       */
+      startupAnimation?: StartupAnimationDescriptor | null;
       /** Resolve a native dropped File to its source path. */
       getDroppedFilePath?: (file: File) => string | null;
     };
@@ -440,6 +448,8 @@ export function normalizeSettings(settings: AppSettings): AppSettings {
     transcriptDisplayMode: isTranscriptDisplayModeValue(settings.transcriptDisplayMode)
       ? settings.transcriptDisplayMode
       : "fully-folded",
+    autoCollapseSettledGroups: settings.autoCollapseSettledGroups !== false,
+    autoCollapseThinking: settings.autoCollapseThinking !== false,
     defaultMode: normalizeMode((settings as { defaultMode?: unknown }).defaultMode),
     infiniteProviderRetry:
       (settings as { infiniteProviderRetry?: unknown }).infiniteProviderRetry === true,
@@ -491,6 +501,22 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     !isTranscriptDisplayModeValue(settings.transcriptDisplayMode)
   ) {
     throw Object.assign(new Error("transcriptDisplayMode is invalid"), {
+      errorCode: "INVALID_PARAMS",
+    });
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(settings, "autoCollapseSettledGroups") &&
+    typeof settings.autoCollapseSettledGroups !== "boolean"
+  ) {
+    throw Object.assign(new Error("autoCollapseSettledGroups is invalid"), {
+      errorCode: "INVALID_PARAMS",
+    });
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(settings, "autoCollapseThinking") &&
+    typeof settings.autoCollapseThinking !== "boolean"
+  ) {
+    throw Object.assign(new Error("autoCollapseThinking is invalid"), {
       errorCode: "INVALID_PARAMS",
     });
   }
@@ -589,6 +615,23 @@ export function validateSettingsWrite(settings: AppSettings): AppSettings {
     throw Object.assign(new Error("inlineVisualizations is invalid"), {
       errorCode: "INVALID_PARAMS",
     });
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "startupAnimation")) {
+    const startupAnimation = value.startupAnimation;
+    if (
+      !startupAnimation ||
+      typeof startupAnimation !== "object" ||
+      Array.isArray(startupAnimation) ||
+      Object.entries(startupAnimation).some(
+        ([key, field]) =>
+          (key !== "enabled" && key !== "skipWhenReady") ||
+          typeof field !== "boolean",
+      )
+    ) {
+      throw Object.assign(new Error("startupAnimation is invalid"), {
+        errorCode: "INVALID_PARAMS",
+      });
+    }
   }
   for (const key of [
     "sidebarRunningIndicators",
@@ -1612,6 +1655,12 @@ export const api = {
   executeCommand: (commandId: string) =>
     invoke(IPC.invoke.commandPaletteExecute, commandId),
   openLogs: () => invoke(IPC.invoke.logOpenFolder),
+  /** What the next launch would play as its boot animation (D679). */
+  startupAnimationStatus: () =>
+    invoke<StartupAnimationStatus>(IPC.invoke.startupAnimationStatus),
+  /** Reveal the folder a startup animation is dropped into, creating it first. */
+  openStartupAnimationFolder: () =>
+    invoke(IPC.invoke.startupAnimationOpenFolder),
   /**
    * Quit the application. Used by the surfaces that own the window before the
    * shell has data; the main process runs the same ordered shutdown as the Quit
@@ -1622,6 +1671,16 @@ export const api = {
   toggleDevTools: (open?: boolean) =>
     invoke<{ open: boolean }>(IPC.invoke.devtoolsToggle, { open }),
   workspaceDiff: (sessionId?: string) => invoke<WorkspaceDiff>(IPC.invoke.workspaceDiff, { ...(sessionId ? { sessionId } : {}) }),
+  workspaceReviewTurns: (input: { sessionId: string; before?: number; limit?: number }) =>
+    invoke<ReviewTurnsPage>(IPC.invoke.workspaceReviewTurns, input),
+  workspaceReviewChanges: (input: { sessionId: string; turnId?: string; snapshotId?: string; offset?: number; limit?: number }) =>
+    invoke<ReviewChangesPage>(IPC.invoke.workspaceReviewChanges, input),
+  workspaceReviewContext: (input: { sessionId: string; snapshotId: string; context: ReviewContextLines }) =>
+    invoke<ReviewContextResult>(IPC.invoke.workspaceReviewContext, input),
+  workspaceReviewOpenFile: (input: { sessionId: string; snapshotId: string; action: "external" | "folder" }) =>
+    invoke(IPC.invoke.workspaceReviewOpenFile, input),
+  workspaceReviewRollbackFile: (input: { sessionId: string; snapshotId: string }) =>
+    invoke<import("@pi-desktop/shared").ReviewFileRollbackResult>(IPC.invoke.workspaceReviewRollbackFile, input),
   workspaceReviewRollback: (input: {
     sessionId: string;
     snapshotId: string;
@@ -2059,6 +2118,11 @@ export const api = {
       pluginId?: string;
       projectPath?: string | null;
       selectSessionId?: string;
+      /**
+       * The one session whose transcript changed. A plugin message write names
+       * it so the shell can repaint an already open transcript (ADR 0339).
+       */
+      sessionId?: string;
     }) => void,
   ) => {
     if (!window.piDesktop?.on) return () => undefined;
@@ -2069,6 +2133,7 @@ export const api = {
           pluginId?: string;
           projectPath?: string | null;
           selectSessionId?: string;
+          sessionId?: string;
         },
       ),
     );

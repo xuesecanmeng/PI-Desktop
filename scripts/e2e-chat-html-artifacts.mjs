@@ -171,10 +171,11 @@ try {
   await page.getByText("No file matches missing.html", { exact: true }).waitFor();
   results.push("missing file reports its failure");
   await page.getByRole("link", { name: "Outside HTML", exact: true }).click();
-  await page.getByText(/is outside the locations this app can access/).waitFor();
+  await page.locator(".file-viewer").waitFor();
+  await page.locator(".file-viewer").getByText(/Pelican bicycle animation/).waitFor();
   assert.equal(await app.evaluate(({ webContents }, url) =>
     webContents.getAllWebContents().some(wc => wc.getURL() === url), pathToFileURL(outside).href), false);
-  results.push("outside HTML is rejected without guest navigation");
+  results.push("outside HTML opens in the host viewer without guest navigation");
   for (const dismiss of await page.locator(".toast-dismiss").all()) await dismiss.click();
   await page.locator(".toast").first().waitFor({ state: "hidden" });
   await page.getByText("Ordinary-scratch.html:1", { exact: true }).click();

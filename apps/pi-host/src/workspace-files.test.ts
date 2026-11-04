@@ -30,13 +30,19 @@ describe("sessionless SSH file views", () => {
   });
   it("does not fall back to this computer or cross symlink containment", async () => {
     const path = await fixture(); const outside = await fixture(); const files = createWorkspaceFiles();
-    await symlink(join(outside, "src", "main.ts"), join(path, "escaped.ts"));
+    const escapedRef = process.platform === "win32" ? "escaped/main.ts" : "escaped.ts";
+    await symlink(
+      process.platform === "win32" ? join(outside, "src") : join(outside, "src", "main.ts"),
+      process.platform === "win32" ? join(path, "escaped") : join(path, "escaped.ts"),
+      process.platform === "win32" ? "junction" : "file",
+    );
     await expect(files.read({ path, operation: "read", ref: join(outside, "src", "main.ts") })).rejects.toMatchObject({ code: "REMOTE_PATH_FORBIDDEN" });
-    await expect(files.read({ path, operation: "read", ref: "escaped.ts" })).rejects.toMatchObject({ code: "REMOTE_PATH_FORBIDDEN" });
+    await expect(files.read({ path, operation: "read", ref: escapedRef })).rejects.toMatchObject({ code: "REMOTE_PATH_FORBIDDEN" });
     expect(await files.read({ path, operation: "resolve", ref: join(outside, "src", "main.ts") })).toEqual({ match: null, reason: "outside-allowed-roots" });
   });
   it("supports canonical root aliases and refuses nonexistent/nonabsolute roots", async () => {
-    const path = await fixture(); const link = `${path}-link`; dirs.push(link); await symlink(path, link);
+    const path = await fixture(); const link = `${path}-link`; dirs.push(link);
+    await symlink(path, link, process.platform === "win32" ? "junction" : "dir");
     const files = createWorkspaceFiles();
     expect(await files.read({ path: link, operation: "read", ref: "src/main.ts" })).toMatchObject({ content: "remote source" });
     await expect(files.read({ path: "relative", operation: "list" })).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
@@ -56,10 +62,18 @@ describe("sessionless SSH file views", () => {
     expect(Buffer.byteLength(loaded.entries[0]?.content ?? "")).toBeLessThan(33_000);
     expect(loaded.entries[0]?.content).not.toContain("�");
   });
-  it("ignores repository instruction links escaping the explicit root", async () => {
+  it("ignores repository instruction links escaping the explicit root", async (ctx) => {
     const path = await fixture(); const outside = await fixture();
     await writeFile(join(outside, "AGENTS.md"), "outside private instructions");
-    await symlink(join(outside, "AGENTS.md"), join(path, "AGENTS.override.md"));
+    try {
+      await symlink(join(outside, "AGENTS.md"), join(path, "AGENTS.override.md"));
+    } catch (error) {
+      if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") {
+        ctx.skip();
+        return;
+      }
+      throw error;
+    }
     await writeFile(join(path, "AGENTS.md"), "contained");
     expect(await createWorkspaceFiles().read({ path, operation: "instructions" })).toEqual({ entries: [{ source: "AGENTS.md", content: "contained" }] });
   });
