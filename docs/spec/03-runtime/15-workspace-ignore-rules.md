@@ -44,7 +44,7 @@ File-name matching is case-insensitive. `Glob` and `Grep` drop matching files
 from their results silently; an explicit `Read`, `Write`, or `Edit` (including
 the `Edit` move destination) of a path denied for that tool fails with
 `WORKSPACE_PATH_DENIED`, and an outside-path grant does not lift that denial.
-`Bash` is not filtered (§6). See ADR 0343 for the disclosure trade-off.
+`Bash` is not filtered (§6). See ADR 0345 for the disclosure trade-off.
 
 ## 4. Default ignore (app)
 

@@ -1,4 +1,4 @@
-# ADR 0343: Allow explicit environment file reads
+# ADR 0345: Allow explicit environment file reads
 
 - Status: Accepted
 - Date: 2026-10-29

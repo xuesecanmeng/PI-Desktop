@@ -213,24 +213,21 @@ test("the transcript bounds mounted history and escalates at the top", () => {
     /isHistoryRevealPosition\(el, pinnedRef\.current && !gesturing\)/,
   );
   const reachTop = transcript.match(
-    /const reachTop = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[captureHistoryAnchor, loadOlder, windowSize\]\);/,
+    /const reachTop = useCallback\(\(background = false\) => \{([\s\S]*?)\n  \}, \[[^\]]*\]\);/,
   )?.[1];
   assert.ok(reachTop, "reachTop must exist with a stable identity");
   assert.match(reachTop, /growTranscriptWindow\(windowSize, historyLengthRef\.current\)/);
-  assert.match(reachTop, /captureHistoryAnchor\(\)/);
+  assert.match(reachTop, /preserveHistory\(\(\) => setWindowSize\(grown\), windowSize, false, background\)/);
   assert.match(reachTop, /setWindowSize\(grown\)/);
-  assert.match(reachTop, /loadOlder\(\)/);
+  assert.match(reachTop, /loadOlder\(background\)/);
 });
 
-test("history anchoring follows the mounted projection rather than incoming data", () => {
-  // The real layout regression is covered by test:e2e:transcript-history.
-  // The deferred projection must own this effect, since incoming message count
-  // changes can commit while the DOM still contains the previous page.
-  assert.match(
-    transcript,
-    /restoreHistoryAnchor\(\);\s*\}, \[historyEntries,[^\]]*tailEntry\]\)/,
-  );
-  assert.doesNotMatch(transcript, /prependHeightRef/);
+test("mounting rows above the viewport is anchored like a fetched page", () => {
+  // Both transitions use one viewport owner; the real DOM/native-wheel
+  // behavior is exercised by e2e-transcript-history-loading.mjs.
+  assert.match(transcript, /preserveHistory\(onLoadOlder, windowSize, true, background\)/);
+  assert.match(transcript, /useTranscriptHistoryPaging\(\{/);
+  assert.doesNotMatch(transcript, /prependHeightRef|el\.scrollTop \+= delta/);
 });
 
 test("the window is owned per session pane, so no switch can inherit a budget", () => {

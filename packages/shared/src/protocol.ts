@@ -14,6 +14,9 @@ export const APP_MENU_COMMANDS = [
   "openHelp",
   "openLogs",
   "checkForUpdates",
+  /** Brings the main window forward on the plugin market page (launcher empty
+   * state, and any other surface that wants to send the user shopping). */
+  "openPluginMarket",
 ] as const;
 
 export type AppMenuCommand = (typeof APP_MENU_COMMANDS)[number];
@@ -131,15 +134,15 @@ export const IPC = {
     liveVoiceWidgetOwnerState: "pi-desktop/voice/live/widget/ownerState",
     liveVoiceWidgetVisibility: "pi-desktop/voice/live/widget/visibility",
     /**
-     * Computer use (ADR 0342). The renderer may read capabilities, list
-     * pickable targets while a picker is open, mint a grant from a target the
-     * user chose, and revoke one. It can never act: there is no channel that
-     * dispatches input, and `computer.act` is reachable only from main's tool
-     * handler.
+     * Computer use (ADR 0342, ADR 0344). The renderer may read capabilities,
+     * read the live grant, and revoke it. It can neither mint nor act: the
+     * grant is minted by main's tool handler against the host's own rules, and
+     * `computer.act` is reachable only from that handler. Enumerating windows
+     * is not a renderer channel either — nothing in the UI picks a target.
      */
     computerCapabilities: "pi-desktop/computer/capabilities",
-    computerListTargets: "pi-desktop/computer/listTargets",
-    computerGrantCreate: "pi-desktop/computer/grant/create",
+    /** Ask the OS for the grant the platform needs; the user's click starts it. */
+    computerRequestPermission: "pi-desktop/computer/permission/request",
     computerGrantRevoke: "pi-desktop/computer/grant/revoke",
     computerGrantDescribe: "pi-desktop/computer/grant/describe",
     agentCompact: "pi-desktop/agent/compact",
@@ -351,6 +354,12 @@ export const IPC = {
     pluginOpenPanel: "pi-desktop/plugin/openPanel",
     pluginLauncherToggle: "pi-desktop/pluginLauncher/toggle",
     pluginLauncherDismiss: "pi-desktop/pluginLauncher/dismiss",
+    pluginLauncherCatalog: "pi-desktop/pluginLauncher/catalog",
+    pluginLauncherOpenApp: "pi-desktop/pluginLauncher/openApp",
+    /** Content-driven window height, measured by the panel itself. */
+    pluginLauncherContentHeight: "pi-desktop/pluginLauncher/contentHeight",
+    /** Close the panel, focus the main window, and open the plugin market. */
+    pluginLauncherOpenMarket: "pi-desktop/pluginLauncher/openMarket",
     pluginThemes: "pi-desktop/plugin/themes",
     pluginProviderCatalog: "pi-desktop/plugin/providerCatalog",
     pluginScenicThemesDestinations: "pi-desktop/plugin/scenicThemes/destinations",
@@ -432,6 +441,7 @@ export const IPC = {
     composerPickPhotos: "pi-desktop/composer/pickPhotos",
     composerImportFiles: "pi-desktop/composer/importFiles",
     composerPasteFiles: "pi-desktop/composer/pasteFiles",
+    composerReadClipboardDirectories: "pi-desktop/composer/readClipboardDirectories",
     clipboardRecordPaste: "pi-desktop/clipboard/recordPaste",
     composerCommands: "pi-desktop/composer/commands",
     workspaceDiff: "pi-desktop/workspace/diff",

@@ -29,6 +29,7 @@ import {
 import {
   HISTORY_REVEAL_THRESHOLD_PX,
   isHistoryRevealPosition,
+  isHistoryPrefetchPosition,
   isRecentScrollGesture,
   isScrollGestureInput,
   reduceTranscriptScroll,
@@ -38,7 +39,6 @@ import {
 } from "../../../../lib/transcript-scroll";
 import { readScrollInputContext, stopSmoothScroll } from "../../../../lib/scroll-input";
 import { useDisclosureAnchor } from "../../../../hooks/use-disclosure-anchor";
-import { useTranscriptHistoryAnchor } from "../../../../hooks/use-transcript-history-anchor";
 import type { TranscriptSearchTarget } from "../../../../lib/transcript-reading";
 import { useTranscriptSearchFocus } from "../../../../hooks/use-transcript-search-focus";
 import {
@@ -47,6 +47,8 @@ import {
 } from "../../../../lib/transcript-reading-position";
 import { useTranscriptReadingPosition, type RestoreTranscriptReading } from "../../../../hooks/use-transcript-reading-position";
 import { useTurnCompletionScroll } from "./useTurnCompletionScroll";
+import { useTranscriptHistoryPaging } from "./useTranscriptHistoryPaging";
+import { useTranscriptLatestNavigation } from "./useTranscriptLatestNavigation";
 
 type UseTranscriptScrollOptions = {
   sessionId: string | undefined;
@@ -62,6 +64,7 @@ type UseTranscriptScrollOptions = {
   paneVisible: boolean;
   searchTarget: TranscriptSearchTarget | null;
   readingWindow: boolean;
+  navigationLoading?: boolean;
   onRestoreReading?: RestoreTranscriptReading;
 };
 
@@ -79,6 +82,7 @@ export function useTranscriptScroll({
   paneVisible,
   searchTarget,
   readingWindow,
+  navigationLoading = false,
   onRestoreReading,
 }: UseTranscriptScrollOptions) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -95,7 +99,6 @@ export function useTranscriptScroll({
   const lastScrollGestureAtRef = useRef(-Infinity);
   const wasRunningRef = useRef(isRunning);
   const followFrameRef = useRef(0);
-  const [loadingOlder, setLoadingOlder] = useState(false);
   const [showJump, setShowJump] = useState(false);
 
   // Steady-state cap on mounted history rows (D261). Grows when the user
@@ -104,8 +107,15 @@ export function useTranscriptScroll({
   // Read by `reachTop`, which must stay referentially stable for the scroll
   // listener; the projection it describes is only known later in this render.
   const historyLengthRef = useRef(0);
+  const latestNavigation = useTranscriptLatestNavigation({
+    scrollRef, visible: paneVisible, onPosition: top => {
+      lastScrollTopRef.current = top;
+      lastLaidOutScrollTopRef.current = top;
+    },
+  });
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    if (latestNavigation.isActive()) return;
     const el = scrollRef.current;
     if (!el || !transcriptHasLayout(el)) return;
     const targetTop = Math.max(0, el.scrollHeight - el.clientHeight);
@@ -119,7 +129,7 @@ export function useTranscriptScroll({
       lastScrollTopRef.current = el.scrollTop;
       lastLaidOutScrollTopRef.current = el.scrollTop;
     }
-  }, []);
+  }, [latestNavigation]);
 
   const cancelFollowScroll = useCallback(() => {
     cancelAnimationFrame(followFrameRef.current);
@@ -129,11 +139,6 @@ export function useTranscriptScroll({
     lastScrollTopRef.current = top;
     lastLaidOutScrollTopRef.current = top;
   }, []);
-  const {
-    capture: captureHistoryAnchor,
-    restore: restoreHistoryAnchor,
-    release: releaseHistoryAnchor,
-  } = useTranscriptHistoryAnchor(scrollRef, contentRef, recordScrollPosition);
   const readingPositionMissing = useCallback(() => {
     pinnedRef.current = true;
     setShowJump(false);
@@ -156,8 +161,7 @@ export function useTranscriptScroll({
     cancelFollowScroll();
     pinnedRef.current = false;
     setShowJump(true);
-    releaseHistoryAnchor();
-  }, [cancelFollowScroll, cancelReadingPosition, releaseHistoryAnchor]);
+  }, [cancelFollowScroll, cancelReadingPosition]);
 
   /*
     Leave follow mode. Every reader-driven move inside the transcript starts
@@ -166,9 +170,10 @@ export function useTranscriptScroll({
     the view one frame later and undoes the move.
   */
   const releaseFollow = useCallback(() => {
+    latestNavigation.cancel();
     stopSmoothScroll(scrollRef.current);
     leaveFollow();
-  }, [leaveFollow]);
+  }, [latestNavigation, leaveFollow]);
 
   // A manual disclosure (a tool, thinking or activity title; #324) hands this
   // scroller the very title it was toggled from, before the expansion state
@@ -188,6 +193,33 @@ export function useTranscriptScroll({
     enterDisclosureReading,
     recordScrollPosition,
   );
+  const startHistoryReading = useCallback((background: boolean) => {
+    releaseDisclosureAnchor();
+    if (background) leaveFollow(); else releaseFollow();
+  }, [leaveFollow, releaseDisclosureAnchor, releaseFollow]);
+  const {
+    loadingOlder, pending: historyPending, run: preserveHistory, retry: retryHistoryPaging,
+    restore: restoreHistoryAnchor, isHeld: isHistoryPaging, isLocked: isHistoryLocked,
+    track: trackHistoryPosition, cancel: cancelHistoryPaging,
+  } = useTranscriptHistoryPaging({
+    scrollRef, contentRef, visible: paneVisible, sourceHead: messages[0]?.id, onStart: startHistoryReading,
+    onPosition: recordScrollPosition, onSettled: rememberReadingPosition,
+  });
+  const releaseNavigationFollow = useCallback(() => {
+    cancelHistoryPaging();
+    releaseFollow();
+  }, [cancelHistoryPaging, releaseFollow]);
+  const notifyDisclosure = useCallback<typeof disclosureAnchorNotifier>((title) => {
+    cancelHistoryPaging();
+    disclosureAnchorNotifier(title);
+  }, [cancelHistoryPaging, disclosureAnchorNotifier]);
+
+  useLayoutEffect(() => {
+    if (!navigationLoading || !latestNavigation.isActive()) return;
+    latestNavigation.cancel();
+    leaveFollow();
+    rememberReadingPosition();
+  }, [latestNavigation, leaveFollow, navigationLoading, rememberReadingPosition]);
 
   // A user scroll-up gesture always emits input before its scroll events;
   // programmatic follow scrolling and layout clamps (composer collapse on
@@ -199,12 +231,18 @@ export function useTranscriptScroll({
   // consumes belongs to that dock.
   const markScrollGesture = useCallback(
     (event: Event) => {
+      if (isHistoryLocked()) return;
+      if (event instanceof WheelEvent && (event.ctrlKey || event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY))) return;
       const input = readScrollInputContext(
         event,
         scrollRef.current,
         contentRef.current,
       );
       if (!isScrollGestureInput(event.type as ScrollInputType, input)) return;
+      if (latestNavigation.isActive()) {
+        latestNavigation.cancel(); leaveFollow(); rememberReadingPosition();
+      }
+      if (!(event instanceof WheelEvent) || (!event.ctrlKey && event.deltaY !== 0)) retryHistoryPaging();
       // Minimap / jump navigation runs in the browser, independently of our
       // follow rAF. Real input must retire that animation at its current offset
       // before its queued frames can overwrite the reader's next movement.
@@ -214,7 +252,7 @@ export function useTranscriptScroll({
       // Real input takes the viewport back from a held disclosure position.
       releaseDisclosureAnchor();
     },
-    [cancelReadingPosition, releaseDisclosureAnchor],
+    [cancelReadingPosition, isHistoryLocked, latestNavigation, leaveFollow, releaseDisclosureAnchor, rememberReadingPosition, retryHistoryPaging],
   );
 
   useEffect(() => {
@@ -262,7 +300,6 @@ export function useTranscriptScroll({
     wasPaneVisibleRef.current = paneVisible;
     if (becameHidden) {
       releaseDisclosureAnchor();
-      releaseHistoryAnchor();
       cancelFollowScroll();
       // Do not read `el.scrollTop` here: the hide CSS has already skipped
       // rendering, so the box reports 0. Restore the last laid-out offset.
@@ -298,7 +335,6 @@ export function useTranscriptScroll({
     cancelFollowScroll,
     paneVisible,
     releaseDisclosureAnchor,
-    releaseHistoryAnchor,
     scrollToBottom,
     sessionId,
   ]);
@@ -309,6 +345,8 @@ export function useTranscriptScroll({
   const paneVisibleRef = useRef(paneVisible);
   paneVisibleRef.current = paneVisible;
   const scheduleFollowScroll = useCallback(() => {
+    if (latestNavigation.isActive()) return;
+    if (isHistoryPaging()) return;
     if (!paneVisibleRef.current) return;
     // A held disclosure position wins over a queued follow frame: re-asserting
     // the bottom here would move the title the reader just toggled even though
@@ -319,7 +357,7 @@ export function useTranscriptScroll({
       followFrameRef.current = 0;
       if (paneVisibleRef.current && pinnedRef.current) scrollToBottom();
     });
-  }, [isDisclosureAnchorHeld, scrollToBottom]);
+  }, [isDisclosureAnchorHeld, isHistoryPaging, latestNavigation, scrollToBottom]);
 
   // Re-pins before the browser paints. A ResizeObserver callback runs after
   // layout and before paint, so a `requestAnimationFrame` requested from it
@@ -333,52 +371,47 @@ export function useTranscriptScroll({
   // restored first: its height can keep changing for several frames, and
   // re-pinning on any one of them is what dragged that title out of view.
   const followScrollNow = useCallback(() => {
+    if (paneVisibleRef.current && restoreHistoryAnchor()) return;
     if (paneVisibleRef.current && restoreDisclosureAnchor()) return;
-    if (!paneVisibleRef.current || readingPositionPendingRef.current) return;
-    if (!pinnedRef.current) {
-      restoreHistoryAnchor();
-      return;
-    }
+    if (!paneVisibleRef.current || !pinnedRef.current) return;
     cancelFollowScroll();
     scrollToBottom();
-  }, [cancelFollowScroll, readingPositionPendingRef, restoreDisclosureAnchor, restoreHistoryAnchor, scrollToBottom]);
+  }, [cancelFollowScroll, restoreDisclosureAnchor, restoreHistoryAnchor, scrollToBottom]);
 
   useEffect(() => cancelFollowScroll, [cancelFollowScroll]);
 
-  const loadOlder = useCallback(() => {
-    const el = scrollRef.current;
-    // Paging is a reading gesture, so a hidden pane never initiates one.
+  const loadOlder = useCallback((background = false) => {
     if (!paneVisibleRef.current) return;
-    if (!el || !hasMoreBefore || loadingOlder || !onLoadOlder) {
-      return;
-    }
-    captureHistoryAnchor();
-    setLoadingOlder(true);
-    void onLoadOlder().finally(() => setLoadingOlder(false));
-  }, [captureHistoryAnchor, hasMoreBefore, loadingOlder, onLoadOlder]);
+    if (!hasMoreBefore || !onLoadOlder) return;
+    preserveHistory(onLoadOlder, windowSize, true, background);
+  }, [hasMoreBefore, onLoadOlder, preserveHistory, windowSize]);
 
   /**
    * Reaching the top escalates in two stages (D261): mount more of what is
    * already loaded, and only fetch an older page once the window covers all of
-   * it. Both stages hold the visible message through every resulting layout.
+   * it. Both stages anchor the viewport the same way, because both change
+   * scrollHeight above the rows the user is reading.
    */
-  const reachTop = useCallback(() => {
+  const reachTop = useCallback((background = false) => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el || isHistoryPaging()) return;
     const grown = growTranscriptWindow(windowSize, historyLengthRef.current);
     if (grown !== windowSize) {
-      captureHistoryAnchor();
-      setWindowSize(grown);
+      preserveHistory(() => setWindowSize(grown), windowSize, false, background);
       return;
     }
-    loadOlder();
-  }, [captureHistoryAnchor, loadOlder, windowSize]);
+    loadOlder(background);
+  }, [isHistoryPaging, loadOlder, preserveHistory, windowSize]);
+
 
   // Follow the stream only while the user is pinned to the bottom; a manual
   // scroll up pauses following and surfaces the jump-to-latest pill.
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    if (latestNavigation.isActive()) { recordScrollPosition(el.scrollTop); return; }
+    if (isHistoryLocked() && restoreHistoryAnchor()) return;
+    trackHistoryPosition();
     if (paneVisibleRef.current && transcriptHasLayout(el)) {
       lastLaidOutScrollTopRef.current = el.scrollTop;
     }
@@ -402,12 +435,14 @@ export function useTranscriptScroll({
       isHistoryRevealPosition(el, pinnedRef.current && !gesturing)
     ) {
       reachTop();
+    } else if (paneVisibleRef.current && gesturing && el.scrollTop < lastScrollTopRef.current &&
+      isHistoryPrefetchPosition(el)) {
+      reachTop(true);
     }
     if (readingWindow) {
       pinnedRef.current = false;
       lastScrollTopRef.current = el.scrollTop;
       setShowJump(true);
-      if (!isDisclosureAnchorHeld()) captureHistoryAnchor();
       rememberReadingPosition();
       return;
     }
@@ -448,9 +483,8 @@ export function useTranscriptScroll({
       pinnedRef.current = transition.pinned;
       setShowJump(transition.showJump);
     }
-    if (paneVisibleRef.current && !pinnedRef.current && !isDisclosureAnchorHeld()) captureHistoryAnchor();
     rememberReadingPosition();
-  }, [cancelFollowScroll, captureHistoryAnchor, isDisclosureAnchorHeld, reachTop, readingPositionPendingRef, readingWindow, rememberReadingPosition, scheduleFollowScroll]);
+  }, [cancelFollowScroll, isHistoryLocked, latestNavigation, reachTop, readingPositionPendingRef, readingWindow, recordScrollPosition, rememberReadingPosition, restoreHistoryAnchor, scheduleFollowScroll, trackHistoryPosition]);
 
   // Send / retry / regenerate always re-pins follow mode so the new prompt and
   // its stream stay in view, even if the user had scrolled up through history.
@@ -460,8 +494,9 @@ export function useTranscriptScroll({
   useLayoutEffect(() => {
     const turnStarted = isRunning && !wasRunningRef.current;
     wasRunningRef.current = isRunning;
-    if (!turnStarted || !paneVisible) return;
-    releaseHistoryAnchor();
+    if (!turnStarted || !paneVisible || readingWindow) return;
+    latestNavigation.cancel(true);
+    cancelHistoryPaging();
     cancelReadingPosition();
     releaseDisclosureAnchor();
     cancelFollowScroll();
@@ -472,11 +507,13 @@ export function useTranscriptScroll({
     scheduleFollowScroll();
   }, [
     cancelFollowScroll,
+    cancelHistoryPaging,
     cancelReadingPosition,
     isRunning,
+    latestNavigation,
+    readingWindow,
     paneVisible,
     releaseDisclosureAnchor,
-    releaseHistoryAnchor,
     rememberReadingPosition,
     scheduleFollowScroll,
     scrollToBottom,
@@ -485,7 +522,7 @@ export function useTranscriptScroll({
   // A completed turn the reader followed ends at its prompt, not its last line.
   useTurnCompletionScroll({
     isRunning, paneVisible, readingWindow, messages, scrollRef, contentRef,
-    isFollowing: () => pinnedRef.current && !isDisclosureAnchorHeld(),
+    isFollowing: () => pinnedRef.current && !latestNavigation.isActive() && !isDisclosureAnchorHeld() && !isHistoryPaging(),
     onAnchored: leaveFollow,
   });
 
@@ -530,7 +567,7 @@ export function useTranscriptScroll({
   );
   const deferredProjection = useDeferredValue(projection);
   const renderedProjection =
-    readingWindow || firstCommit || paneRevealed ? projection : deferredProjection;
+    readingWindow || historyPending || firstCommit || paneRevealed ? projection : deferredProjection;
   const { entries, visible, history: allHistoryEntries } = renderedProjection;
   const tailEntry = entries.at(-1);
   // Published for `reachTop`, which is declared above this projection but only
@@ -615,24 +652,19 @@ export function useTranscriptScroll({
     [allHistoryEntries, transcriptWindow.bounded, transcriptWindow.mounted],
   );
 
-  // The rendered projection can commit after `messages` changes. Keep the
-  // anchor until that DOM exists; ResizeObserver also covers late row heights.
-  useLayoutEffect(() => {
-    if (!paneVisible || pinnedRef.current || readingPositionPendingRef.current || isDisclosureAnchorHeld()) return;
-    restoreHistoryAnchor();
-  }, [historyEntries, isDisclosureAnchorHeld, paneVisible, readingPositionPendingRef, restoreHistoryAnchor, tailEntry]);
-
   const releaseSearchFollow = useCallback((fresh: boolean) => {
+    latestNavigation.cancel();
     stopSmoothScroll(scrollRef.current);
     cancelReadingPosition();
-    if (fresh) releaseHistoryAnchor();
+    if (fresh) cancelHistoryPaging();
     releaseDisclosureAnchor();
     cancelFollowScroll();
     pinnedRef.current = false;
     setShowJump(true);
-  }, [cancelFollowScroll, cancelReadingPosition, releaseDisclosureAnchor, releaseHistoryAnchor]);
+  }, [cancelFollowScroll, cancelHistoryPaging, cancelReadingPosition, latestNavigation, releaseDisclosureAnchor]);
   useTranscriptSearchFocus({
     target: searchTarget,
+    suspended: latestNavigation.isActive(),
     source: searchTarget
       ? messages.find((message) => message.id === searchTarget.messageId)?.content ?? ""
       : "",
@@ -714,6 +746,7 @@ export function useTranscriptScroll({
   const revealEarlierHistory = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    retryHistoryPaging();
     if (isHistoryRevealPosition(el)) {
       reachTop();
       return;
@@ -727,24 +760,24 @@ export function useTranscriptScroll({
       top: 0,
       behavior: reduceMotion ? "auto" : "smooth",
     });
-  }, [reachTop, releaseDisclosureAnchor, releaseFollow]);
+  }, [reachTop, releaseDisclosureAnchor, releaseFollow, retryHistoryPaging]);
 
-  const jumpToLatest = useCallback(() => {
+  const jumpToLatest = useCallback((arrive?: () => void) => {
+    // Retire the gesture and all competing owners before yielding any frames.
+    lastScrollGestureAtRef.current = -Infinity;
     cancelReadingPosition();
+    cancelHistoryPaging();
+    cancelFollowScroll();
     releaseDisclosureAnchor();
     pinnedRef.current = true;
     setShowJump(false);
-    releaseHistoryAnchor();
-    // Persist the explicit follow intent before smooth scrolling yields. A
-    // session/project switch can hide or unmount this pane before its native
-    // scroll event; leaving the old bookmark would restore history on return.
+    // A hide/eviction must still retain the accepted follow intent.
     rememberReadingPosition();
-    scrollToBottom(
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-    );
-  }, [cancelReadingPosition, releaseDisclosureAnchor, releaseHistoryAnchor, rememberReadingPosition, scrollToBottom]);
+    latestNavigation.start(() => {
+      arrive?.();
+      scrollToBottom();
+    });
+  }, [cancelFollowScroll, cancelHistoryPaging, cancelReadingPosition, latestNavigation, releaseDisclosureAnchor, rememberReadingPosition, scrollToBottom]);
 
   // D269: history progression follows the visible top boundary, not only a
   // native scroll event. A tail page can collapse to less than one viewport,
@@ -834,7 +867,8 @@ export function useTranscriptScroll({
     revealEarlierHistory,
     scrollToBottom,
     jumpToLatest,
-    releaseFollow,
-    disclosureAnchorNotifier,
+    isLatestNavigationActive: latestNavigation.isActive,
+    releaseFollow: releaseNavigationFollow,
+    disclosureAnchorNotifier: notifyDisclosure,
   };
 }
