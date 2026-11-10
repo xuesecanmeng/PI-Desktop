@@ -132,6 +132,7 @@ child.on("close", (code) => {
     code === 0 &&
     probe?.ok &&
     probe.appName === "PI-Desktop" &&
+    probe.version === probe.packagedVersion &&
     probe.platform === process.platform &&
     (process.platform === "darwin" || probe.maximized === true) &&
     menuContractOk &&

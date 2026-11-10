@@ -53,6 +53,14 @@ E2E harnesses point a build at a throwaway profile with it.
 7. Create main window / renderer
 8. Renderer performs `app/getVersion` healthcheck through main
 
+Private develop Windows packages use an independent date/build version from
+the packaged manifest. Desktop version IPC, About, feedback, plugin/MCP version
+reporting and startup logs use that installed version; unpackaged development
+keeps shared `APP_VERSION`. Remote Host release matching and Host version
+responses retain the upstream baseline. This does not change the application
+ID, profile selection, data directory, protocol or schema (ADR
+`private-develop-date-version`).
+
 If the first `app.handshake` times out, Main disposes the failed child and
 starts a fresh one once in the same launch. Shutdown and other startup errors
 bypass this retry. If startup still fails, show the recovery surface. Before

@@ -21,6 +21,7 @@ Each ADR includes:
 
 | ID | Title | Status |
 |---|---|---|
+| private-develop-date-version | [Independent date versions for private develop installers](private-develop-date-version.md) | Accepted for private develop only |
 | private-develop-command-proxy | [Inherit the computer proxy for private develop commands](private-develop-command-proxy.md) | Accepted for private develop only |
 | configurable-file-opening | [Configurable file opening and explicit directory links](configurable-file-opening.md) | Implemented candidate |
 | mode-definitions | [User-definable modes as staged workflows](mode-definitions.md) | Proposed |

@@ -2,7 +2,6 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   APP_NAME,
-  APP_VERSION,
   ErrorCodes,
   IPC,
   PROTOCOL_VERSION,
@@ -20,6 +19,7 @@ import type { PluginRuntime } from "../plugin-runtime";
 import type { RuntimeState } from "./context";
 import { syncPluginDisplayLocale } from "../plugin-display-locale";
 import { RuntimeSupervisor } from "@pi-desktop/host-runtime";
+import { DESKTOP_VERSION } from "../desktop-version";
 
 type RestartKind = "host" | "sidecar";
 export type RuntimeLifecycleDependencies = {
@@ -216,7 +216,7 @@ export function createRuntimeLifecycle({
 
   const bootBackends = async (): Promise<void> => {
     mkdirSync(join(dataDir, "logs"), { recursive: true });
-    logger.app("lifecycle", "info", "app boot " + APP_NAME + " " + APP_VERSION, {
+    logger.app("lifecycle", "info", "app boot " + APP_NAME + " " + DESKTOP_VERSION, {
       data: { protocolVersion: PROTOCOL_VERSION },
     });
     try {
@@ -250,7 +250,7 @@ export function createRuntimeLifecycle({
           return null;
         }
       },
-      getAppVersion: () => APP_VERSION,
+      getAppVersion: () => DESKTOP_VERSION,
     });
     try {
       const workspace = await runtimeState.host!.call<{

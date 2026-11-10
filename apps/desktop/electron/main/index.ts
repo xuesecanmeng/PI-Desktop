@@ -20,7 +20,6 @@ import {
 } from "./network-proxy";
 import { installInsecureEndpointNotice } from "./network-notice";
 import {
-  APP_VERSION,
   IPC,
   IPC_WHITELIST,
   isActiveInProject,
@@ -72,6 +71,7 @@ import { createEventPersistence } from "./runtime/event-persistence";
 import { createPlanRuntime } from "./runtime/plans";
 import { createModeServices } from "./runtime/mode-services";
 import { createRuntimeLifecycle } from "./runtime/lifecycle";
+import { DESKTOP_VERSION } from "./desktop-version";
 import {
   createProviderCatalogRuntime,
 } from "./runtime/provider-catalog";
@@ -249,7 +249,7 @@ const inflightCheckpointer = new InflightCheckpointer(async (checkpoint) => {
 const updater = new AppUpdaterController({
   logger,
   send: sendToRenderer,
-  currentVersion: APP_VERSION,
+  currentVersion: DESKTOP_VERSION,
   isPackaged: !isDevelopmentBuild,
   getLocale: () => mainState.updaterLocale,
   readUpdateSettings: async () => {

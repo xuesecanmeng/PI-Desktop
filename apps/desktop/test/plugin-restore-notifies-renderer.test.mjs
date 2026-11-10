@@ -62,6 +62,7 @@ test("startup plugin restore notifies the renderer after every enabled plugin lo
       schemaTooNewOf: () => null,
     },
     "../plugin-display-locale": { syncPluginDisplayLocale: async () => {} },
+    "../desktop-version": { DESKTOP_VERSION: "0.0.0-test" },
     "@pi-desktop/host-runtime": {
       RuntimeSupervisor: class {
         superviseRestart() {

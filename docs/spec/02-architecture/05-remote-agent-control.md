@@ -159,8 +159,10 @@ Bootstrap runs over the user's own SSH session, never over RACP:
    the `ssh` client through an askpass helper, never as an argument, and is
    stored encrypted in the desktop's secure storage so the host can reconnect
    after a restart.
-2. It resolves the matching Desktop version and published Linux target, fetches
-   the named release SHA-256 over HTTPS, and uploads a small bootstrap script.
+2. It resolves the matching Desktop source release (`APP_VERSION`) and published
+   Linux target, fetches the named release SHA-256 over HTTPS, and uploads a
+   small bootstrap script. Private develop installer date versions are display
+   and packaging labels, not published Host release tags.
    Remote download is preferred. Only `download-failed` permits one bounded,
    locally verified download and SSH upload of that same artifact; integrity or
    SSH authentication failure does not. The remote side verifies the archive

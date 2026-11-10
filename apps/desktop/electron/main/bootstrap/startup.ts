@@ -12,6 +12,7 @@ import {
   type NativeMenuAction,
 } from "@pi-desktop/shared";
 import { installApplicationMenu } from "../application-menu";
+import { DESKTOP_VERSION } from "../desktop-version";
 import { installGenUiProtocol } from "../gen-ui-protocol";
 import { installPluginAssetProtocol } from "../plugin-asset-protocol";
 import { installPluginRendererProtocol } from "../plugin-renderer-protocol";
@@ -226,8 +227,8 @@ export function registerApplicationStartup(deps: StartupDependencies): void {
     createTray();
     app.setAboutPanelOptions({
       applicationName: APP_NAME,
-      applicationVersion: APP_VERSION,
-      version: APP_VERSION,
+      applicationVersion: DESKTOP_VERSION,
+      version: DESKTOP_VERSION,
     });
     installApplicationMenu({
       locale: app.getLocale(),
@@ -404,7 +405,7 @@ export function registerApplicationStartup(deps: StartupDependencies): void {
           dataDir,
           invoke: invokeIpc,
           channels: IPC.invoke,
-          version: APP_VERSION,
+          version: DESKTOP_VERSION,
           port: process.env.PI_DESKTOP_MCP_PORT
             ? Number(process.env.PI_DESKTOP_MCP_PORT)
             : undefined,
@@ -514,6 +515,7 @@ export function registerApplicationStartup(deps: StartupDependencies): void {
             }
             probe.ctrlRBlocked = ctrlRPrevented;
             probe.appName = app.getName();
+            probe.packagedVersion = app.getVersion();
             probe.menuCount = Menu.getApplicationMenu()?.items.length ?? 0;
             if (!host || !window) throw new Error("session-list probe requires a healthy desktop");
             probe.sessionList = await runSessionListProbe({

@@ -4,7 +4,6 @@ import { existsSync, statSync } from "node:fs";
 import { listInstalledFonts } from "../system-fonts";
 import {
   APP_NAME,
-  APP_VERSION,
   ErrorCodes,
   IPC,
   PROTOCOL_VERSION,
@@ -12,6 +11,7 @@ import {
   buildBugReportUrl,
 } from "@pi-desktop/shared";
 import { globalInstructionPath } from "@pi-desktop/agent-runtime";
+import { DESKTOP_VERSION } from "../desktop-version";
 import type { HostProcess } from "../host-process";
 import type { AppUpdaterController } from "../updater";
 import type { IpcRegistrar } from "./types";
@@ -59,7 +59,7 @@ export function registerAppIpc({
           .catch(() => undefined)
       : undefined;
     const url = buildBugReportUrl({
-      version: APP_VERSION,
+      version: DESKTOP_VERSION,
       platform: process.platform,
       arch: process.arch,
       protocolVersion: PROTOCOL_VERSION,
@@ -79,7 +79,7 @@ export function registerAppIpc({
       : undefined;
     return {
       name: APP_NAME,
-      version: APP_VERSION,
+      version: DESKTOP_VERSION,
       protocolVersion: PROTOCOL_VERSION,
       hostProtocolVersion: hostVersion?.protocolVersion,
       hostVersion: hostVersion?.version,

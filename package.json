@@ -13,6 +13,7 @@
     "preview": "pnpm --filter @pi-desktop/desktop run preview",
     "pack": "pnpm --filter @pi-desktop/desktop run pack",
     "dist": "pnpm --filter @pi-desktop/desktop run dist",
+    "dist:develop:win": "node scripts/build-develop-windows.mjs",
     "pi-plugin": "pi-plugin",
     "build": "pnpm -r --if-present build && cargo build --release -p host-core",
     "build:js": "pnpm -r --if-present build",

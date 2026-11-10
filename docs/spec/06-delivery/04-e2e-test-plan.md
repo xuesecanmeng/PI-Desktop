@@ -11298,6 +11298,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 | Acceptance | Scenarios |
 |---|---|
+| A / E / Quality — Private installer version and identity | E2E-private-develop-version |
 | E / Security / Quality — Private command proxy inheritance | E2E-private-command-proxy |
 | C / E / Security / Quality — Gemini work setup | E2E-LIVE-VOICE-gemini-work-schema |
 | C / Quality — Continue after malformed tool output | E2E-RUNTIME-malformed-tool-call-continue-recovery |
@@ -15239,6 +15240,29 @@ are withdrawn with ADR 0165.
   ADR `private-develop-command-proxy`.
 - **Acceptance**: command networking, startup/restart isolation. Fixtures are
   loopback-only; no external provider or Docker service is used.
+- **Milestone**: private maintenance.
+- **Status**: automated.
+
+### E2E-private-develop-version: Independent installer version
+
+- **Preconditions**: private develop; normal release builds completed; persistent
+  release output directory; no user profile used by the boot probe.
+- **Steps**: run `pnpm dist:develop:win`; inspect the packaged manifest and Windows
+  executable version resources; run `node scripts/e2e-electron-boot.mjs
+  <version-directory>/win-unpacked/PI-Desktop.exe` against the isolated profile.
+- **Expected**: installer and application report `YYYY.M.D-dev.N`; Windows
+  numeric versions are `YYYY.M.D.N`; app ID/name, installed data path and update
+  opt-out are unchanged. Source versions remain the upstream baseline; build
+  metadata records it and the Git commit. Renderer version IPC agrees with
+  Electron's installed version. No remote publication occurs.
+- **Coverage**: `scripts/build-develop-windows.test.mjs` covers numbering,
+  concurrent reservations, failure paths and builder metadata;
+  `desktop-version.test.mjs` covers version IPC and feedback;
+  `single-instance.test.mjs` preserves identity/profile behavior;
+  `e2e-electron-boot.mjs` verifies the real packaged application.
+- **Specs**: `03-runtime/07-process-model.md`, `03-runtime/01-ipc-protocol.md`,
+  `06-delivery/06-release-runbook.md`, ADR `private-develop-date-version`.
+- **Acceptance**: private versioning and existing installation identity.
 - **Milestone**: private maintenance.
 - **Status**: automated.
 

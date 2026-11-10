@@ -1,5 +1,10 @@
 # scripts
 
+Private Windows installer packaging: `pnpm dist:develop:win` (after the normal
+release builds). `build-develop-windows.mjs` reserves `YYYY.M.D-dev.N` under
+`apps/desktop/release` and stamps only the installed app. Its optional positional
+argument selects a persistent release root when packaging from a worktree.
+
 Repository automation. Every script here is invoked from a `package.json`
 script, from a GitHub workflow, or by hand during a release; the alias column
 gives the invocation the rest of the documentation quotes.

@@ -47,11 +47,32 @@ when macOS `iconutil` is available, without overwriting the canonical source.
 
 For the local `develop` packaging policy in `AGENTS.md`, complete the normal
 workspace dependency, release-host, runtime-bundle, and desktop builds, then
-run this installer-only command from the repository root:
+run this private installer-only command from the repository root:
 
 ```bash
-pnpm --filter @pi-desktop/desktop exec electron-builder --win nsis --publish never --config.extraMetadata.piDistribution=installed
+pnpm dist:develop:win
 ```
+
+Private installers use `YYYY.M.D-dev.N`, with the date in Asia/Shanghai and no
+leading zeroes. `N` starts at 1 each day and increases past existing version
+directories in `apps/desktop/release`. Directory reservation is atomic; failed
+attempts consume a number, and existing output is never overwritten. Keep these
+directories to retain the local sequence. Windows file/product versions use
+`YYYY.M.D.N` (daily `N` is limited to 65535).
+
+The command stamps the packaged manifest only: workspace manifests, Cargo
+versions, and shared `APP_VERSION` retain the upstream source version. Installed
+Desktop version IPC, About, feedback, plugins, MCP and startup logs use the
+packaged version. Remote Host release selection continues using the upstream
+baseline. The application ID, name and data directories are unchanged, and
+automatic updates stay disabled. No tag or push is performed.
+
+Each version directory contains its installer, unpacked app, and `build-info.json`
+with the private version, upstream version, source commit and installer SHA-256.
+From a request worktree, use
+`node scripts/build-develop-windows.mjs <persistent-release-root>` to share the
+primary checkout's output sequence. This step requires the normal builds above;
+it does not install dependencies or rebuild source assets.
 
 The generic `dist:win` script builds all three Windows formats. Reserve it
 for explicit requests that include ZIP and portable EXE.

@@ -28,7 +28,7 @@ function startupFixture(startFailure, isQuitting = () => false) {
     dataDir: "/fixture",
     logger: { app() {} },
     APP_NAME: "PI-Desktop",
-    APP_VERSION: "fixture",
+    DESKTOP_VERSION: "fixture",
     PROTOCOL_VERSION: 11,
     runtimeState: { host: { async call() { return {}; } } },
     async startHost() {

@@ -1299,6 +1299,9 @@ Non-sensitive config that can be returned to the UI:
   explicit disabled/Unbound state
 - optional `AppSettings.developerMode`; absent and `false` both keep developer
   tools disabled
+- Private develop's existing `app/getVersion` response reports the installed
+  date/build version in `version`; `hostVersion` remains the upstream Host
+  version. Response fields and protocol versions are unchanged.
 - optional `AppSettings.networkProxy` (`system` / `direct` / `custom` plus a
   proxy URL and bypass list). Absent means System. Custom accepts `http`,
   `https`, `socks5`, and `socks5h` URLs, including userinfo. Main applies

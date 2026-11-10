@@ -42,7 +42,7 @@ test("the optional MCP control server reuses IPC and synchronizes renderer state
   assert.match(startup, /const invokeIpc = registerIpc\(\)/);
   assert.match(startup, /process\.env\.PI_DESKTOP_MCP_CONTROL === "1"/);
   assert.match(startup, /channels: IPC\.invoke/);
-  assert.match(startup, /version: APP_VERSION/);
+  assert.match(startup, /version: DESKTOP_VERSION/);
   assert.match(startup, /mcpControlRendererEvent/);
   assert.match(startup, /process\.env\.PI_DESKTOP_MCP_PORT/);
   assert.match(shutdown, /getMcpControl\(\)\?\.stop\(\)/);
