@@ -15920,16 +15920,20 @@ are withdrawn with ADR 0165.
   `generated/`. Every file contains the word `needle`. The session is Agent
   in `auto` permission mode.
 - **Steps**: 1) Ask for `Read` of `.env`, `.env.test`, `.env.example`, and
-  `server.pem`. 2) Ask for `Write` to `keys/id_rsa` and `.env`. 3) Run an
+  `server.pem`. 2) Write and edit `.env`, `.env.test`, `.ENV.local`, and a
+  nested `.env.production`, then read back the changed values. Ask for
+  `Write` to `keys/id_rsa`. 3) Run an
   unscoped `Grep` and `Glob` for `needle`.
   4) Run `Grep` with `path: node_modules/pkg` and with `path: generated`.
   5) Repeat step 3 with a system `rg` installed and with
   `PI_DESKTOP_DISABLE_RG=1`.
 - **Expected**: The `.env`, `.env.test`, and `.env.example` reads succeed;
-  the `server.pem` read and both writes fail with `WORKSPACE_PATH_DENIED`.
-  No `keys/id_rsa` file is created, and `.env` remains unchanged. The
-  unscoped search lists `notes.txt` and `.env.example` only: `.env`, `.env.test`,
-  `server.pem`, `node_modules`, `generated`, and `debug.log` are absent. The
+  environment-file writes and edits succeed, while the `server.pem` read
+  and `keys/id_rsa` write fail with `WORKSPACE_PATH_DENIED`.
+  No `keys/id_rsa` file is created. The unscoped search includes matching
+  environment files and `notes.txt`; `server.pem`, `node_modules`, `generated`,
+  and `debug.log` are absent. Environment files excluded by normal ignore
+  rules stay hidden in unscoped searches and remain explicitly accessible. The
   explicit-path searches return one hit each. The in-process walker and the
   `rg` fast path produce the same file set.
 - **Specs linked**: `03-runtime/15-workspace-ignore-rules.md`,
@@ -15937,8 +15941,8 @@ are withdrawn with ADR 0165.
 - **Acceptance**: B (workspace tools), Security
 - **Milestone**: M3+
 - **Status**: unit-covered by `crates/host-core/src/tools/mod.rs` and
-  `tools/ignore_rules.rs`; `scripts/e2e-smoke.mjs` covers the explicit env
-  read and private-key denial through the host RPC, and
+  `tools/ignore_rules.rs`; `scripts/e2e-smoke.mjs` covers the environment-file
+  write/read/edit/search workflow and private-key denial through the host RPC, and
   `scripts/e2e-parallel-read-batches.mjs` verifies that a local model fixture
   receives the env read result through the agent runtime.
 

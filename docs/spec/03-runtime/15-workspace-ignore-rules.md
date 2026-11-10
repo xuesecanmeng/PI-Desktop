@@ -34,17 +34,20 @@ root) for:
 - private key patterns: `*.pem`, `*.key`, `id_rsa`, `id_ed25519`
 - credential files: `*.p12`, `*.pfx`, `credentials.json` (Google)
 
-`.env` and `.env.*` are allowed for explicit `Read` calls. They remain denied
-for `Write` and `Edit`, and are hidden from `Glob` and `Grep`, except for the
-documentation variants ending in `.example`, `.sample`, or `.template`. Other
-denylist rules still apply to explicit reads, including protected suffixes and
-`.git/objects/**`. Plugin filesystem access follows its own policy.
+On private `develop`, `.env` and `.env.*` use ordinary built-in file-tool
+policies: `Read`, `Write`, `Edit`, `Glob`, and `Grep` have no environment-file
+exception or denial. Normal permission modes and search ignores still apply.
+Other denylist rules remain effective, including protected suffixes such as
+`.env.private.key` and `.git/objects/**`. Plugin filesystem access follows its
+own unchanged policy.
 
 File-name matching is case-insensitive. `Glob` and `Grep` drop matching files
 from their results silently; an explicit `Read`, `Write`, or `Edit` (including
 the `Edit` move destination) of a path denied for that tool fails with
 `WORKSPACE_PATH_DENIED`, and an outside-path grant does not lift that denial.
-`Bash` is not filtered (§6). See ADR 0345 for the disclosure trade-off.
+`Bash` is not filtered (§6). See
+[ordinary environment-file tools](../../adr/private-env-file-tools.md) for the
+disclosure and modification trade-offs.
 
 ## 4. Default ignore (app)
 
@@ -84,7 +87,7 @@ Syntax: gitignore-compatible subset.
 |---|---|
 | Glob | unscoped walk: layers 1–4 filter results; explicit `path`: layer 1 only |
 | Grep | unscoped walk: layers 1–4 filter the file set (in-process walker and the system `rg` fast path alike); explicit `path`: layer 1 only |
-| Read | `.env` and `.env.*` are allowed unless another denylist rule applies; otherwise `WORKSPACE_PATH_DENIED` on a denylisted file; outside paths remain permission-gated |
+| Read | `WORKSPACE_PATH_DENIED` on a denylisted file; environment files use ordinary rules; outside paths remain permission-gated |
 | Write/Edit | `WORKSPACE_PATH_DENIED` on a denylisted file or move destination; otherwise permission-gated when the explicit path is outside; `TOOL_DENIED` after denial |
 | Bash | path sandbox still enforced by host; ignore file does not expand bash powers |
 

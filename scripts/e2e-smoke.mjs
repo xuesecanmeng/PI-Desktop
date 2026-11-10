@@ -289,27 +289,47 @@ async function main() {
       read.ok === true && String(read.content?.content || "").includes("Sample Project"),
     );
 
-    const envProject = join(dataDir, "env-read-project");
+    const envProject = join(dataDir, "env-file-project");
     mkdirSync(envProject);
-    writeFileSync(join(envProject, ".env.test"), "SAMPLE_VALUE=example\n");
     writeFileSync(join(envProject, "private.key"), "fixture\n");
     await host.call("projects.create", { path: envProject });
     const envSession = await host.call("session.create", {
-      title: "E2E environment file read",
+      title: "E2E environment file workflow",
       mode: "agent",
       projectPath: envProject,
     });
-    const envRead = await host.call("tools.execute", {
-      sessionId: envSession.session.id,
-      toolCallId: randomUUID(),
-      toolName: "Read",
-      args: { path: ".env.test" },
-      mode: "agent",
+    await host.call("session.configure", {
+      id: envSession.session.id, mode: "agent", permissionMode: "auto",
     });
-    record(
-      "E2E-234-explicit-env-read",
-      envRead.ok === true && String(envRead.content?.content || "").includes("SAMPLE_VALUE=example"),
-    );
+    const envPaths = [".env", ".env.test", ".ENV.local", "nested/.env.production", ".env.example", ".env.sample", ".env.template"];
+    for (const path of envPaths) {
+      let tag;
+      for (const [toolName, args] of [
+        ["Write", { path, content: "SAMPLE_VALUE=before\n" }],
+        ["Read", { path }],
+        ["Edit", { path, ops: "PUT 1.=1:\n+SAMPLE_VALUE=after" }],
+        ["Read", { path }],
+      ]) {
+        const result = await host.call("tools.execute", {
+          sessionId: envSession.session.id, toolCallId: randomUUID(),
+          toolName, args: toolName === "Edit" ? { ...args, tag } : args, mode: "agent",
+        });
+        if (toolName === "Read") tag = result.content?.tag;
+        record(`E2E-234-env-${toolName}-${path}`, result.ok === true, result.errorCode || "");
+      }
+      record(`E2E-234-env-edited-${path}`,
+        readFileSync(join(envProject, path), "utf8") === "SAMPLE_VALUE=after\n");
+    }
+    for (const [toolName, args] of [
+      ["Glob", { pattern: "**/*" }],
+      ["Grep", { pattern: "SAMPLE_VALUE=after", outputMode: "filesWithMatches" }],
+    ]) {
+      const result = await host.call("tools.execute", {
+        sessionId: envSession.session.id, toolCallId: randomUUID(),
+        toolName, args, mode: "agent",
+      });
+      record(`E2E-234-env-${toolName}`, result.ok === true && result.content?.count === envPaths.length);
+    }
     const keyRead = await host.call("tools.execute", {
       sessionId: envSession.session.id,
       toolCallId: randomUUID(),

@@ -21,6 +21,7 @@ Each ADR includes:
 
 | ID | Title | Status |
 |---|---|---|
+| private-env-file-tools | [Treat environment files as ordinary built-in tool files](private-env-file-tools.md) | Accepted for private develop only |
 | private-develop-date-version | [Independent date versions for private develop installers](private-develop-date-version.md) | Accepted for private develop only |
 | private-develop-command-proxy | [Inherit the computer proxy for private develop commands](private-develop-command-proxy.md) | Accepted for private develop only |
 | configurable-file-opening | [Configurable file opening and explicit directory links](configurable-file-opening.md) | Implemented candidate |
@@ -412,6 +413,6 @@ Each ADR includes:
 | 0340 | [Let a granted plugin reach every session, not only its imports](0340-plugin-session-all-scope.md) | Accepted (D680; amends ADR 0200 and ADR 0323) |
 | 0343 | [The plugin launcher enumerates and opens local applications](0343-plugin-launcher-local-apps.md) | Accepted (issue #2085) |
 | 0344 | [Computer use grants the whole desktop automatically, and Stop is the boundary](0344-computer-use-whole-desktop-grant.md) | Accepted (D682; amends ADR 0342 §4 and §6) |
-| explicit-env-file-reads | [Allow explicit environment file reads](explicit-env-file-reads.md) | Accepted |
+| explicit-env-file-reads | [Allow explicit environment file reads](explicit-env-file-reads.md) | Superseded on private develop |
 | 0345 | [One settings destination owns one subject](0345-one-settings-destination-one-subject.md) | Accepted (D684; amends D143, D166, D678) |
 | 0346 | [`@agent` mentions route a turn to a named subagent](0346-composer-agent-mentions.md) | Accepted (issue #986; extends 0024 / 0062) |

@@ -188,8 +188,7 @@ fn consume_rg_line(line: &str, search_dir: &Path, parsed: &mut BTreeMap<PathBuf,
     if path.is_relative() {
         path = search_dir.join(path);
     }
-    // Belt and braces for the security denylist: `.env.*` cannot be expressed
-    // as an rg exclude glob without flipping the run into whitelist mode.
+    // Recheck the case-insensitive denylist regardless of rg's glob matching.
     if super::ignore_rules::is_sensitive_path(&path) {
         return;
     }

@@ -3,8 +3,7 @@
 //! Four layers, highest priority first:
 //!
 //! 1. Security denylist: private keys and credential bundles are protected
-//!    across tools. `.env` files may be explicitly read, but are protected
-//!    from writes and searches. The denylist cannot be disabled.
+//!    across tools. The denylist cannot be disabled.
 //! 2. App defaults: build output and dependency trees are hidden from an
 //!    unscoped `Glob`/`Grep` walk. An explicit `path` argument opts back in,
 //!    the same way it already bypasses parent `.gitignore` rules.
@@ -20,14 +19,10 @@ use std::path::{Path, PathBuf};
 pub const WORKSPACE_IGNORE_FILE: &str = ".pi-desktopignore";
 
 /// Exact file names on the security denylist (spec 15 §3).
-const SENSITIVE_FILE_NAMES: &[&str] = &["id_rsa", "id_ed25519", "credentials.json", ".env"];
+const SENSITIVE_FILE_NAMES: &[&str] = &["id_rsa", "id_ed25519", "credentials.json"];
 
 /// File-name suffixes on the security denylist (spec 15 §3).
 const SENSITIVE_SUFFIXES: &[&str] = &[".pem", ".key", ".p12", ".pfx"];
-
-/// `.env.*` variants that document configuration instead of holding it and
-/// therefore stay readable (`.env.example`, `.env.sample`, `.env.template`).
-const ENV_TEMPLATE_SUFFIXES: &[&str] = &[".example", ".sample", ".template"];
 
 /// Directory names hidden from unscoped walks (spec 15 §4, plus `.git`).
 pub const DEFAULT_IGNORE_DIRS: &[&str] = &[
@@ -59,18 +54,9 @@ pub const DENIED_CODE: &str = "WORKSPACE_PATH_DENIED";
 
 /// Whether a file name is on the always-on security denylist.
 pub fn is_sensitive_file_name(name: &str) -> bool {
-    is_sensitive_file_name_with_env(name, true)
-}
-
-fn is_sensitive_file_name_with_env(name: &str, deny_env: bool) -> bool {
     let lower = name.to_ascii_lowercase();
-    if deny_env && lower.starts_with(".env.") {
-        return !ENV_TEMPLATE_SUFFIXES
-            .iter()
-            .any(|suffix| lower.ends_with(suffix));
-    }
     if SENSITIVE_FILE_NAMES.contains(&lower.as_str()) {
-        return deny_env || lower != ".env";
+        return true;
     }
     SENSITIVE_SUFFIXES
         .iter()
@@ -80,19 +66,10 @@ fn is_sensitive_file_name_with_env(name: &str, deny_env: bool) -> bool {
 /// Whether a resolved path is blocked by the security denylist: either its
 /// file name matches, or it lives under a `.git/objects` tree.
 pub fn is_sensitive_path(path: &Path) -> bool {
-    is_sensitive_path_with_env(path, true)
-}
-
-/// Whether a path is blocked for an explicit Read.
-pub fn is_sensitive_read_path(path: &Path) -> bool {
-    is_sensitive_path_with_env(path, false)
-}
-
-fn is_sensitive_path_with_env(path: &Path, deny_env: bool) -> bool {
     if path
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| is_sensitive_file_name_with_env(name, deny_env))
+        .is_some_and(is_sensitive_file_name)
     {
         return true;
     }
@@ -179,9 +156,7 @@ pub fn configure_walker(walker: &mut WalkBuilder, ignore_root: &Path, scoped: bo
     });
 }
 
-/// Extra `rg` arguments implementing the same layers. `.env.*` is left to the
-/// post-filter (`is_sensitive_path`) because an rg include glob would switch
-/// the whole run into whitelist mode.
+/// Extra `rg` arguments implementing the same layers.
 pub fn rg_args(ignore_root: &Path, scoped: bool) -> Vec<String> {
     let mut args = Vec::new();
     for name in SENSITIVE_FILE_NAMES {
@@ -227,11 +202,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn denylist_matches_keys_env_and_credentials() {
+    fn denylist_matches_keys_and_credentials() {
         for name in [
-            ".env",
-            ".env.local",
-            ".ENV.production",
             "server.pem",
             "private.key",
             "id_rsa",
@@ -243,6 +215,9 @@ mod tests {
             assert!(is_sensitive_file_name(name), "{name} must be denied");
         }
         for name in [
+            ".env",
+            ".env.local",
+            ".ENV.production",
             ".env.example",
             ".env.sample",
             ".env.template",
@@ -264,13 +239,12 @@ mod tests {
     }
 
     #[test]
-    fn explicit_env_reads_keep_other_security_rules() {
+    fn env_files_keep_other_security_rules() {
         for name in [".env", ".env.test", ".ENV.production"] {
-            assert!(!is_sensitive_read_path(Path::new(name)), "{name}");
-            assert!(is_sensitive_path(Path::new(name)), "{name}");
+            assert!(!is_sensitive_path(Path::new(name)), "{name}");
         }
         for path in ["private.key", ".env.private.key", ".git/objects/.env"] {
-            assert!(is_sensitive_read_path(Path::new(path)), "{path}");
+            assert!(is_sensitive_path(Path::new(path)), "{path}");
         }
     }
 

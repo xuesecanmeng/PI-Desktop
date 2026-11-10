@@ -177,7 +177,8 @@
 36. Provider storage: **Rust SQLite configs + OS secret store references**
 37. Secrets backend: **safeStorage primary + encrypted file fallback**
 38. Workspace ignore: **denylist + defaults + `.pi-desktopignore`**; explicit
-    `.env` reads are allowed under ADR 0345
+    `.env` and `.env.*` use ordinary built-in file-tool policies under
+    [private develop environment-file tools](../adr/private-env-file-tools.md)
 39. Tool result limits: **per-tool budgets (128KB / 4000 lines search, 96KB / 4000 lines shell); `truncated` only when a result is cut short**
 40. Settings directory: **Appearance / Conversation / Shortcuts / Voice / Behavior / Models / Instructions / Skills / MCP / Subagents / Project archive / System / Cloud sync / Remote Hosts / Info** — one destination owns one subject (D684);
     external model, skill, and MCP scans live in their owning pages; session

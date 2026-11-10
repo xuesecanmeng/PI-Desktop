@@ -1555,7 +1555,7 @@ fn tool_read(
     let (resolved, root_kind) =
         resolve_tool_path_with_external(root, roots, path, allow_external_paths)
             .map_err(|e| (e.clone(), e))?;
-    if ignore_rules::is_sensitive_read_path(&resolved) {
+    if ignore_rules::is_sensitive_path(&resolved) {
         return Err(ignore_rules::denied_error(path));
     }
     let offset = args
@@ -4154,6 +4154,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn env_files_follow_the_regular_file_tool_workflow() {
+        let dir = tempfile::tempdir().unwrap();
+        for path in [
+            ".env",
+            ".env.test",
+            ".ENV.local",
+            "nested/.env.production",
+            ".env.example",
+            ".env.sample",
+            ".env.template",
+        ] {
+            for (tool, args) in [
+                (
+                    "Write",
+                    serde_json::json!({ "path": path, "content": "SAMPLE_VALUE=before\n" }),
+                ),
+                ("Read", serde_json::json!({ "path": path })),
+                (
+                    "Edit",
+                    serde_json::json!({ "path": path, "old_string": "before", "new_string": "after" }),
+                ),
+            ] {
+                let result = execute_tool(Some(dir.path()), None, tool, &args, 5_000).await;
+                assert!(result.ok, "{tool} {path}: {:?}", result.content);
+            }
+            let read = execute_tool(
+                Some(dir.path()),
+                None,
+                "Read",
+                &serde_json::json!({ "path": path }),
+                5_000,
+            )
+            .await;
+            assert!(read.ok, "{path}: {:?}", read.content);
+            assert!(read.content["content"]
+                .as_str()
+                .unwrap()
+                .contains("SAMPLE_VALUE=after"));
+        }
+        for (tool, args) in [
+            ("Glob", serde_json::json!({ "pattern": "**/*" })),
+            (
+                "Grep",
+                serde_json::json!({ "pattern": "SAMPLE_VALUE=after", "outputMode": "filesWithMatches" }),
+            ),
+        ] {
+            let result = execute_tool(Some(dir.path()), None, tool, &args, 5_000).await;
+            assert!(result.ok, "{tool}: {:?}", result.content);
+            assert_eq!(result.content["count"], 7, "{tool}: {:?}", result.content);
+        }
+        std::fs::write(dir.path().join(".pi-desktopignore"), ".env*\n").unwrap();
+        let hidden = execute_tool(
+            Some(dir.path()),
+            None,
+            "Glob",
+            &serde_json::json!({ "pattern": "**/.env*" }),
+            5_000,
+        )
+        .await;
+        assert!(hidden.ok, "{:?}", hidden.content);
+        assert_eq!(hidden.content["count"], 0);
+        let explicit = execute_tool(
+            Some(dir.path()),
+            None,
+            "Grep",
+            &serde_json::json!({ "pattern": "SAMPLE_VALUE=after", "path": ".env.test" }),
+            5_000,
+        )
+        .await;
+        assert!(explicit.ok, "{:?}", explicit.content);
+        assert_eq!(explicit.content["count"], 1);
+    }
+
+    #[tokio::test]
     async fn security_denylist_protects_keys_writes_and_search_results() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(".env"), "SECRET_TOKEN=needle\n").unwrap();
@@ -4244,28 +4318,6 @@ mod tests {
             Some("WORKSPACE_PATH_DENIED")
         );
 
-        for (tool, args) in [
-            (
-                "Write",
-                serde_json::json!({ "path": ".env", "content": "changed" }),
-            ),
-            (
-                "Edit",
-                serde_json::json!({ "path": ".env", "old_string": "needle", "new_string": "changed" }),
-            ),
-        ] {
-            let result = execute_tool(Some(dir.path()), None, tool, &args, 5_000).await;
-            assert_eq!(
-                result.error_code.as_deref(),
-                Some("WORKSPACE_PATH_DENIED"),
-                "{tool}"
-            );
-        }
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join(".env")).unwrap(),
-            "SECRET_TOKEN=needle\n"
-        );
-
         let write = execute_tool(
             Some(dir.path()),
             None,
@@ -4288,7 +4340,7 @@ mod tests {
         let shown = grep.content.to_string();
         assert!(shown.contains("notes.txt"), "{shown}");
         assert!(shown.contains(".env.example"), "{shown}");
-        assert!(!shown.contains("\".env\""), "{shown}");
+        assert!(shown.contains("\".env\""), "{shown}");
         assert!(!shown.contains("server.pem"), "{shown}");
 
         let glob = execute_tool(
@@ -4302,7 +4354,7 @@ mod tests {
         let shown = glob.content.to_string();
         assert!(shown.contains("notes.txt"), "{shown}");
         assert!(!shown.contains("server.pem"), "{shown}");
-        assert!(!shown.contains("\".env\""), "{shown}");
+        assert!(shown.contains("\".env\""), "{shown}");
     }
 
     #[tokio::test]

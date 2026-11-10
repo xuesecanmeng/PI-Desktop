@@ -1,6 +1,6 @@
 # ADR: Allow explicit environment file reads
 
-- Status: Accepted
+- Status: Superseded on private develop by [ordinary environment-file tools](private-env-file-tools.md)
 - Date: 2026-10-29
 
 ## Context
