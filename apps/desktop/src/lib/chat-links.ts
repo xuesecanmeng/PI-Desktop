@@ -287,8 +287,10 @@ export function resolveMarkdownFileRef(
   const decoded = safeDecodeUri(href);
   const target = resolvePreviewTarget(decoded, root, baseDir);
   if (target?.kind === "file") return target;
-  const path = isAbsoluteFilePath(decoded) ? decoded : toWorkspaceRel(decoded, root, baseDir);
-  return path ? { path } : null;
+  const position = parseFileRefPosition(decoded);
+  const reference = position ? stripLineRef(decoded) : decoded;
+  const path = isAbsoluteFilePath(reference) ? reference : toWorkspaceRel(reference, root, baseDir);
+  return path ? { path, ...(position ?? {}) } : null;
 }
 
 /** Route a plain click on a local Markdown link through the existing file opener. */
@@ -298,15 +300,21 @@ export function handleMarkdownFileLinkClick(
   root: string | null | undefined,
   baseDir: string | undefined,
   openFileRef: (path: string, baseDir?: string, mimeType?: string,
-    position?: { line?: number; column?: number }) => void,
+    options?: { line?: number; column?: number; allowDirectory?: boolean }) => void,
 ): boolean {
   const target = resolveMarkdownFileRef(href, root, baseDir);
   if (!target) return false;
   event.preventDefault();
+  // The link names its target deliberately, so an extension-less directory
+  // destination opens in the file manager instead of missing (issue #2113).
   if (target.line !== undefined) {
-    openFileRef(target.path, baseDir, undefined, { line: target.line, column: target.column });
+    openFileRef(target.path, baseDir, undefined, {
+      line: target.line,
+      column: target.column,
+      allowDirectory: true,
+    });
   } else {
-    openFileRef(target.path, baseDir);
+    openFileRef(target.path, baseDir, undefined, { allowDirectory: true });
   }
   return true;
 }

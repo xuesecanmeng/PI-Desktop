@@ -79,3 +79,48 @@ test("a compaction anchored on a message the transcript does not hold is ignored
   const inspector = inspect(messages, [mark("missing", { contextTokens: 12_000 })]);
   assert.equal(inspector.estimatedOccupancyTokens, undefined);
 });
+
+test("compacted context uses the checkpoint model after the historical model is retired (#2164)", () => {
+  const historicalUsage = { inputTokens: 480_000, outputTokens: 2_238, totalTokens: 482_238 };
+  const messages = [message("a1", "assistant", { providerId: "p", modelId: "retired", usage: historicalUsage })];
+  const configured = [{ id: "p", models: [{ id: "current", contextWindow: 1_000_000 }] }];
+  const checkpoint = mark("a1", { contextTokens: 20_619, providerId: "p", modelId: "current" });
+  const inspector = latestTurnContextInspector(messages, {}, configured, [checkpoint], { providerId: "p", modelId: "current" });
+  assert.equal(inspector.contextWindow, 1_000_000);
+  assert.equal(composerContextUsage(inspector).usedPercent, 2);
+  assert.equal(inspector.usage, historicalUsage);
+});
+
+test("local checkpoint estimates use the rebuilt model window and yield to a newer request", () => {
+  const messages = [message("a1", "assistant", { providerId: "p", modelId: "m", usage })];
+  const configured = [{ id: "p", models: [{ id: "m", contextWindow: 100_000 }, { id: "current", contextWindow: 1_000_000 }] }];
+  const checkpoint = mark("a1", { tokensAfter: 20_619, contextTokens: 30_000, providerId: "p", modelId: "current" });
+  const inspector = latestTurnContextInspector(messages, {}, configured, [checkpoint]);
+  assert.equal(inspector.estimatedOccupancyTokens, 20_619);
+  assert.equal(inspector.contextWindow, 1_000_000);
+  assert.equal(composerContextUsage(inspector).usedPercent, 2);
+  const next = latestTurnContextInspector([
+    ...messages, message("a2", "assistant", { providerId: "p", modelId: "m", usage }),
+  ], {}, configured, [checkpoint]);
+  assert.equal(next.estimatedOccupancyTokens, undefined);
+  assert.equal(next.contextWindow, 100_000);
+});
+
+test("legacy compactions can use the current exact model while request usage keeps its model", () => {
+  const messages = [message("a1", "assistant", { providerId: "p", modelId: "m", usage })];
+  const configured = [{ id: "p", models: [{ id: "m", contextWindow: 100_000 }, { id: "current", contextWindow: 1_000_000 }] }];
+  const current = { providerId: "p", modelId: "current" };
+  const before = latestTurnContextInspector(messages, {}, configured, [], current);
+  assert.equal(before.contextWindow, 100_000);
+  const after = latestTurnContextInspector(messages, {}, configured, [mark("a1", { contextTokens: 20_619 })], current);
+  assert.equal(after.contextWindow, 1_000_000);
+  assert.equal(after.usage, usage);
+});
+
+test("unknown compacted model capacity remains an explicit estimate without borrowing another route", () => {
+  const messages = [message("a1", "assistant", { providerId: "p", modelId: "tenant/missing", usage })];
+  const configured = [{ id: "p", models: [{ id: "missing", contextWindow: 1_000_000 }] }];
+  const inspector = latestTurnContextInspector(messages, {}, configured, [mark("a1", { contextTokens: 20_619 })], { providerId: "p", modelId: "tenant/missing" });
+  assert.equal(inspector.contextWindow, 128_000);
+  assert.equal(inspector.contextWindowEstimated, true);
+});

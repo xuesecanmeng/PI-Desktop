@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("piDesktop", { platform: process.platform,
 const path = require("node:path");
 app.setPath("userData", path.join(__dirname, "profile"));
 ipcMain.handle("fixture/invoke", async (event, channel) => {
+  if (channel === "pi-desktop/session/usageCost") return { ok: true, data: { sessionId: "fixture-session", turnCount: 1, requestCount: 1, providers: [] } };
   if (channel === "pi-desktop/agent/compact") {
     const send = payload => event.sender.send("pi-desktop/agent/event/message", { sessionId: "fixture-session", ts: Date.now(), event: payload });
     send({ type: "compaction_start", reason: "manual" });

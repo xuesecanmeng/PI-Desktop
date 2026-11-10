@@ -1,4 +1,5 @@
 import { clipboard } from "electron";
+import { registerSidebarPreferencesIpc } from "./sidebar-preferences-ipc";
 import { readComposerClipboardDirectories } from "../composer-clipboard-directories";
 import { BrowserWindow, dialog, shell, type OpenDialogOptions } from "electron";
 import { dirname } from "node:path";
@@ -21,7 +22,7 @@ import {
   loadComposerTemplates,
   type ComposerTemplate,
 } from "@pi-desktop/agent-runtime";
-import { remoteWorkspaceForFiles } from "../remote/workspace-file-scope";
+import { remoteWorkspaceForFiles, sessionForFiles } from "../remote/workspace-file-scope";
 import { getActiveRemoteHostsBoot } from "../bootstrap/remote-hosts";
 import { cloneGitRepository } from "../git-clone";
 import {
@@ -136,6 +137,7 @@ export function registerWorkspaceIpc({
     });
   };
   const assertMainWindowSender = registrar.assertMainWindowSender;
+  registerSidebarPreferencesIpc({ registrar, dataDir });
   let composerPickerActive = false;
   let projectPickerActive = false;
 
@@ -675,7 +677,7 @@ handleWithEvent(
     },
   );
 
-  const remoteFileWorkspace = (sessionId?: string) => remoteWorkspaceForFiles(getHost, sessionId);
+  const remoteFileWorkspace = (sessionId?: string) => remoteWorkspaceForFiles(getHost, sessionId, getSidecar);
   const readRemoteFiles = (remote: RemoteWorkspace, operation: WorkspaceFilesRequest["operation"], ref?: string, mimeType?: string) => {
     const boot = getActiveRemoteHostsBoot();
     if (!boot) throw new Error("remote hosts unavailable");
@@ -829,9 +831,7 @@ handleWithEvent(
     let worktree: string | undefined;
     let parent: string | undefined;
     if (sessionId) {
-      const { session } = await owner.call<{ session?: { projectPath?: string; worktree?: unknown } }>(
-        "session.get", { id: sessionId, messageLimit: 1 },
-      );
+      const session = await sessionForFiles(getHost, sessionId, getSidecar);
       const projectPath = session?.projectPath?.trim();
       if (session?.worktree) {
         // Chat references and source reads must see the same files as the
@@ -881,7 +881,7 @@ handleWithEvent(
     sessionId: string | undefined,
   ): Promise<string | null> => {
     const id = String(sessionId ?? "").trim();
-    if (!id || !host) return null;
+    if (!id || id.startsWith("native-pi:") || !host) return null;
     try {
       const result = await host.call<{ path: string }>("session.getScratchPath", {
         sessionId: id,
@@ -1042,10 +1042,13 @@ handleWithEvent(
   handle(
     IPC.invoke.fsResolveRef,
     async (
-      input: { ref?: string; sessionId?: string; allowDirectories?: boolean } = {},
+      input: { ref?: string; sessionId?: string; allowDirectories?: boolean; allowDirectory?: boolean } = {},
     ): Promise<FsChatRefResolveResult> => {
       if (input.allowDirectories !== undefined && typeof input.allowDirectories !== "boolean") {
         throw Object.assign(new Error("allowDirectories is invalid"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
+      }
+      if (input.allowDirectory !== undefined && typeof input.allowDirectory !== "boolean") {
+        throw Object.assign(new Error("allowDirectory is invalid"), { errorCode: ErrorCodes.INVALID_ARGUMENT });
       }
       const rawRef = String(input.ref ?? "").trim();
       if (!rawRef) return { match: null };
@@ -1077,7 +1080,7 @@ handleWithEvent(
         containment: [{ kind: "scratch" as const, path: join(dataDir, "scratch") }],
         attachments: join(dataDir, "attachments"),
       };
-      return { match: await resolveUserChatFileRef(ref, roots, { allowDirectories: input.allowDirectories === true }) };
+      return { match: await resolveUserChatFileRef(ref, roots, { allowDirectories: input.allowDirectories ?? input.allowDirectory ?? false }) };
     },
   );
 

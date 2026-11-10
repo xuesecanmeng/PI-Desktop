@@ -119,9 +119,16 @@ export type FsChatRefMatch = {
   relativePath: string;
   /** Native absolute path of the matched file or opted-in directory. */
   absolutePath: string;
-  /** Present only for an exact directory match requested with allowDirectories. */
+  /** Directory matches carry both this local spelling and the upstream target. */
   isDirectory?: true;
   matchedBy: FsChatRefMatchKind;
+  /**
+   * What the match names. Absent means a regular file. `"directory"` is
+   * produced only for an exact reference resolved with `allowDirectory` —
+   * never by a shorthand or fuzzy match — and the chat open flow routes it to
+   * the file manager instead of the file view.
+   */
+  target?: "file" | "directory";
   /**
    * Which folder of the project answered, for `root: "workspace"`. The caller
    * needs it to decide how to address the file: relative for the primary

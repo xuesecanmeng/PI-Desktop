@@ -17,7 +17,7 @@ resolver could not complete them even if they reached Main.
 The [local user-file amendment](user-local-file-access.md) removes project/store
 containment for local desktop user actions. Remote and plugin scopes stay separate.
 
-- Settings → AI → Defaults has one `fileOpenTarget` preference for files,
+- Settings → Conversation → Input & links has one `fileOpenTarget` preference for files,
   including HTML, and directories: `workpanel` or `external`. Missing or unknown
   stored values keep built-in viewing; invalid writes are rejected in renderer
   and Main. Existing host-owned JSON settings and configuration synchronization

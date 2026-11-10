@@ -87,3 +87,13 @@ it("reports missing files and keeps directory opt-in separate from user access",
   expect(await resolveUserChatFileRef(f.outside, f.roots)).toBeNull();
   expect(await resolveUserChatFileRef(f.outside, f.roots, { allowDirectories: true })).toMatchObject({ root: "external", isDirectory: true });
 });
+
+it("keeps both directory option spellings compatible without widening the scoped resolver", async () => {
+  const f = await fixture();
+  for (const options of [{ allowDirectories: true }, { allowDirectory: true }]) {
+    expect(await resolveUserChatFileRef(f.outside, f.roots, options)).toMatchObject({
+      root: "external", isDirectory: true, target: "directory",
+    });
+    expect(await resolveChatFileRef(f.outside, f.roots, options)).toBeNull();
+  }
+});

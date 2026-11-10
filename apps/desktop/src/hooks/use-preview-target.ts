@@ -38,6 +38,10 @@ export function useOpenPreviewTarget() {
         return openFileRef(target.path, undefined, undefined, {
           line: target.line,
           column: target.column,
+          // A tool names its paths deliberately, the way a Markdown link does,
+          // so a directory argument opens in the file manager instead of
+          // reporting a missing file (issue #2113).
+          allowDirectory: true,
         });
       }
       if (target.kind === "session") {
@@ -100,6 +104,8 @@ export type ChatFileOpenOptions = {
   line?: number;
   column?: number;
   destination?: ChatFileOpenDestination;
+  /** Let an exact path resolve to a directory; the open flow browses it. */
+  allowDirectory?: boolean;
 };
 
 /**
@@ -173,6 +179,7 @@ export function useResolveChatFileRef({ reportErrors = true }: { reportErrors?: 
     async (
       path: string,
       baseDir?: string,
+      options?: { allowDirectory?: boolean },
     ): Promise<ResolvedChatFileRef | null> => {
       const state = useAppStore.getState();
       const ownerId = paneSessionId || state.activeSessionId;
@@ -188,7 +195,7 @@ export function useResolveChatFileRef({ reportErrors = true }: { reportErrors?: 
         : null;
       let result;
       try {
-        result = await api.fsResolveRef(anchored ?? raw, ownerId, true);
+        result = await api.fsResolveRef(anchored ?? raw, ownerId, options?.allowDirectory ?? true);
       } catch (error) {
         if (reportErrors) showToast(t("chat.fileRefLookupFailed"), { variant: "error" });
         else console.warn("File-reference metadata lookup failed", error);
@@ -214,7 +221,7 @@ export function useResolveChatFileRef({ reportErrors = true }: { reportErrors?: 
           inProject: false,
           primary: false,
           scratch: match.sessionScratch === true,
-          ...(match.isDirectory ? { isDirectory: true } : {}),
+          ...(match.isDirectory || match.target === "directory" ? { isDirectory: true } : {}),
         };
       }
       // A project group can hold several folders, and a relative path always
@@ -228,7 +235,7 @@ export function useResolveChatFileRef({ reportErrors = true }: { reportErrors?: 
         inProject: true,
         primary,
         scratch: false,
-        ...(match.isDirectory ? { isDirectory: true } : {}),
+        ...(match.isDirectory || match.target === "directory" ? { isDirectory: true } : {}),
       };
     },
     [paneSessionId, reportErrors, sessionId, showToast, t, workspacePath],
@@ -271,7 +278,7 @@ export function useOpenChatFileRef() {
       const column = options?.column;
       const explicitDestination = options?.destination;
       void (async () => {
-        const resolved = await resolveRef(path, baseDir);
+        const resolved = await resolveRef(path, baseDir, options);
         if (!resolved) return;
         const current = useAppStore.getState();
         if (

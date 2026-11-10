@@ -14,11 +14,12 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
 import { catalogs, flattenCatalog } from "@pi-desktop/i18n";
 import { IPC } from "@pi-desktop/shared";
 import { ComputerUseSettings } from "../../apps/desktop/src/features/settings/computer-use/ComputerUseSettings";
 
-await i18n.init({ lng: "en", keySeparator: false,
+await i18n.use(initReactI18next).init({ lng: "en", keySeparator: false,
   resources: { en: { translation: flattenCatalog(catalogs.en) } },
   interpolation: { escapeValue: false } });
 const initial = { platform: "darwin", backend: "macos-ax", fidelity: "full",
@@ -74,13 +75,13 @@ async function until(predicate, message) {
   throw new Error(message + ": " + document.body.textContent);
 }
 const button = () => [...document.querySelectorAll("button")]
-  .find((node) => /Accessibility not requested|Accessibility denied/.test(node.textContent));
+  .find((node) => ["not-requested", "denied"].some(status => node.textContent === i18n.t("computerUse.permission." + status)));
 const message = () => document.querySelector('[role="status"]');
 function reply(data = capabilities) { requests.shift()({ ok: true, data: { ...data } }); }
 
 window.computerPermissionProbe = async () => {
   render();
-  await until(() => document.body.textContent.includes("Accessibility not requested"), "status missing");
+  await until(() => document.body.textContent.includes(i18n.t("computerUse.permission.not-requested")), "status missing");
   check(requestCount === 0, "opening Settings requested OS permission");
   check(button(), "missing Accessibility status must be a clickable button");
   button().focus();
@@ -98,7 +99,7 @@ window.computerPermissionProbe = async () => {
   capabilities.applicationAccessibility = "granted";
   const beforePoll = readCount;
   [...permissionTimers.values()][0]();
-  await until(() => document.body.textContent.includes("Accessibility granted"), "app grant did not update without a focus event");
+  await until(() => document.body.textContent.includes(i18n.t("computerUse.permission.granted")), "app grant did not update without a focus event");
   check(readCount > beforePoll && !button(), "authorized app remained actionable");
   check(message()?.textContent.includes("backend"), "backend denial was hidden behind the app grant");
   await until(() => permissionTimers.size === 0, "granted app kept polling");
@@ -116,7 +117,7 @@ window.computerPermissionProbe = async () => {
   check(!button().disabled, "failed request cannot be retried");
   flushSync(() => button().click());
   reply({ ...capabilities, accessibility: "granted" });
-  await until(() => document.body.textContent.includes("Accessibility granted"), "retry did not update status");
+  await until(() => document.body.textContent.includes(i18n.t("computerUse.permission.granted")), "retry did not update status");
 
   // A capabilities read started before a request must not overwrite its result.
   capabilities = { ...initial };
@@ -127,7 +128,7 @@ window.computerPermissionProbe = async () => {
   await until(() => reads.length === 1, "controlled read did not start");
   flushSync(() => button().click());
   reply({ ...initial, accessibility: "granted" });
-  await until(() => document.body.textContent.includes("Accessibility granted"), "grant result missing");
+  await until(() => document.body.textContent.includes(i18n.t("computerUse.permission.granted")), "grant result missing");
   reads.shift()({ ok: true, data: { ...initial } });
   await settle();
   check(!button(), "stale read overwrote granted permission");
@@ -141,11 +142,11 @@ window.computerPermissionProbe = async () => {
   capabilities.accessibility = "granted";
   window.dispatchEvent(new Event("focus"));
   reply(initial);
-  await until(() => document.body.textContent.includes("Accessibility granted"), "focus during request lost the final grant");
+  await until(() => document.body.textContent.includes(i18n.t("computerUse.permission.granted")), "focus during request lost the final grant");
 
   capabilities = { ...initial, platform: "linux", backend: "unsupported", accessibility: "unsupported" };
   window.dispatchEvent(new Event("focus"));
-  await until(() => document.body.textContent.includes("Accessibility unsupported"), "unsupported status missing");
+  await until(() => document.body.textContent.includes(i18n.t("computerUse.permission.unsupported")), "unsupported status missing");
   check(!button(), "unsupported platform offers an OS request");
 
   // Unmount removes refresh listeners and discards pending request results.
@@ -198,8 +199,9 @@ const { app, BrowserWindow } = require("electron");
 const path = require("node:path");
 app.setPath("userData", path.join(__dirname, "profile"));
 app.whenReady().then(async () => {
-  const win = new BrowserWindow({ show: false, width: 640, height: 480,
+  const win = new BrowserWindow({ show: true, width: 640, height: 480,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+  win.webContents.on("console-message", event => console.error(event.message));
   try {
     await win.loadFile(path.join(__dirname, "index.html"));
     console.log("COMPUTER_PERMISSION_PROBE " + JSON.stringify(await win.webContents.executeJavaScript("window.computerPermissionProbe()")));
@@ -208,7 +210,7 @@ app.whenReady().then(async () => {
 });`);
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    const child = spawn(resolveElectronBinary(root).electronBinary, [join(temp, "main.cjs")], {
+    const child = spawn(resolveElectronBinary(root).electronBinary, ["--headless=new", join(temp, "main.cjs")], {
       env, stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";

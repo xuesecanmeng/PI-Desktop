@@ -45,6 +45,7 @@ async function createMainWindow(systemVersion) {
     windowState, BrowserWindow, screen,
     process: { platform: "win32", getSystemVersion: () => systemVersion },
     restoredBounds: null, initialMinWidth: 800, initialMinHeight: 560,
+    startupAnimation: null,
     initialWindowBackground: "#181818", APP_NAME: "PI-Desktop",
     windowsIconPath: () => undefined,
     join: () => "fixture-preload.cjs", getModuleDirectory: () => "fixture",

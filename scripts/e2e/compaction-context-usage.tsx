@@ -26,7 +26,7 @@ useAppStore.setState({ activeSessionId: "fixture-session", messages: history, se
 function Harness() {
   const messages = useAppStore(state => state.messages);
   const marks = useAppStore(state => state.sessionCompactions["fixture-session"]);
-  const data = latestTurnContextInspector(messages, {}, [{ id: "fixture", contextWindow: 256_000 }], marks);
+  const data = latestTurnContextInspector(messages, {}, [{ id: "fixture", models: [{ id: "fixture-model", contextWindow: 256_000 }] }], marks);
   return <><button id="compact" onClick={() => { void useAppStore.getState().compactContext(); }}>Compact context</button>
     {data && <ContextUsageInspector {...data} />}</>;
 }

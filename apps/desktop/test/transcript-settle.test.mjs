@@ -138,7 +138,7 @@ test("pinned follow re-pins inside the resize observer, on the border box", () =
   // position (#324) is restored ahead of it, in the same callback.
   assert.match(
     transcript,
-    /const followScrollNow = useCallback\(\(\) => \{[\s\S]{0,400}?if \(!pinnedRef\.current\) \{\s*restoreHistoryAnchor\(\);\s*return;\s*\}\s*cancelFollowScroll\(\);\s*scrollToBottom\(\);/,
+    /const followScrollNow = useCallback\(\(\) => \{\s*if \(paneVisibleRef\.current && restoreHistoryAnchor\(\)\) return;\s*if \(paneVisibleRef\.current && restoreDisclosureAnchor\(\)\) return;\s*if \(!paneVisibleRef\.current \|\| !pinnedRef\.current\) return;\s*cancelFollowScroll\(\);\s*scrollToBottom\(\);/,
   );
   assert.match(transcript, /new ResizeObserver\(followScrollNow\)/);
   assert.doesNotMatch(transcript, /new ResizeObserver\(scheduleFollowScroll\)/);

@@ -350,6 +350,12 @@ async function listRootFiles(
   return walkRootFiles(rootPath, MAX_ROOT_WALK_ENTRIES);
 }
 
+export type ChatRefResolveOptions = {
+  allowDirectories?: boolean;
+  /** Upstream spelling retained at the shared boundary. */
+  allowDirectory?: boolean;
+};
+
 /**
  * Resolve a chat reference to a file, or an opted-in exact directory. Returns
  * null when nothing matches; an unreadable root is simply not a match.
@@ -357,8 +363,9 @@ async function listRootFiles(
 export async function resolveChatFileRef(
   ref: string,
   roots: ChatRefRoots,
-  { allowDirectories = false }: { allowDirectories?: boolean } = {},
+  options: ChatRefResolveOptions = {},
 ): Promise<FsChatRefMatch | null> {
+  const allowDirectories = options.allowDirectories ?? options.allowDirectory ?? false;
   const parsed = parseChatRef(ref);
   if (!parsed) return null;
   const rootList = orderedRoots(roots);
@@ -395,7 +402,7 @@ export async function resolveChatFileRef(
         relativePath,
         absolutePath,
         matchedBy: "exact-absolute",
-        ...(kind === "directory" ? { isDirectory: true as const } : {}),
+        ...(kind === "directory" ? { isDirectory: true as const, target: "directory" as const } : {}),
         ...(root.sessionScratch ? { sessionScratch: true } : {}),
         ...(root.projectRoot ? { projectRoot: root.projectRoot } : {}),
       };
@@ -442,7 +449,7 @@ export async function resolveChatFileRef(
         relativePath: parsed.segments.join("/"),
         absolutePath,
         matchedBy: "exact-relative",
-        ...(kind === "directory" ? { isDirectory: true as const } : {}),
+        ...(kind === "directory" ? { isDirectory: true as const, target: "directory" as const } : {}),
         ...(root.sessionScratch ? { sessionScratch: true } : {}),
         ...(root.projectRoot ? { projectRoot: root.projectRoot } : {}),
       };
@@ -479,8 +486,9 @@ export async function resolveChatFileRef(
 export async function resolveUserChatFileRef(
   ref: string,
   roots: ChatRefRoots,
-  { allowDirectories = false }: { allowDirectories?: boolean } = {},
+  options: ChatRefResolveOptions = {},
 ): Promise<FsChatRefMatch | null> {
+  const allowDirectories = options.allowDirectories ?? options.allowDirectory ?? false;
   const known = await resolveChatFileRef(ref, roots, { allowDirectories });
   if (known) return known;
   const cleaned = cleanRef(ref);
@@ -494,6 +502,6 @@ export async function resolveUserChatFileRef(
     relativePath: "",
     absolutePath: path,
     matchedBy: isAbsolute(cleaned) || /^(?:file:|~[/\\])/i.test(cleaned) ? "exact-absolute" : "exact-relative",
-    ...(kind === "directory" ? { isDirectory: true as const } : {}),
+    ...(kind === "directory" ? { isDirectory: true as const, target: "directory" as const } : {}),
   };
 }

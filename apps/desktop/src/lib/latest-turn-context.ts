@@ -5,7 +5,7 @@ import type {
   ProviderPublic,
   UiMessage,
 } from "@pi-desktop/shared";
-import { resolveContextWindow } from "./context-usage";
+import { DEFAULT_CONTEXT_WINDOW, resolveKnownContextWindow } from "./context-usage";
 import { getSessionMessageSnapshot } from "./session-transcript-updates";
 import { getTranscriptProjection } from "./transcript-projection";
 import { getAssistantTurnSummary } from "./transcript-summary";
@@ -14,6 +14,7 @@ export type LatestTurnContextInspector = {
   usage: MessageUsage;
   turnUsage: MessageUsage;
   contextWindow: number;
+  contextWindowEstimated?: boolean;
   tools: UiMessage[];
   responseDurationMs?: number;
   responseOutputTokens?: number;
@@ -40,6 +41,7 @@ export function latestTurnContextInspector(
   providerModels: Record<string, ModelInfo[]>,
   providers: ProviderPublic[],
   compactions?: readonly ContextCompactionMark[],
+  currentModel?: { providerId?: string; modelId?: string },
 ): LatestTurnContextInspector | undefined {
   let latestUsageMessage: UiMessage | undefined;
   let latestUsageIndex = -1;
@@ -69,6 +71,17 @@ export function latestTurnContextInspector(
       ? Math.round(estimate)
       : undefined;
 
+  const windowModel = estimatedOccupancyTokens !== undefined
+    ? latestMark?.providerId && latestMark.modelId
+      ? latestMark
+      : currentModel?.providerId && currentModel.modelId
+        ? currentModel
+        : latestUsageMessage
+    : latestUsageMessage;
+  const knownContextWindow = resolveKnownContextWindow(
+    windowModel?.providerId, windowModel?.modelId, providerModels, providers,
+  );
+
   const { entries } = getTranscriptProjection(messages, compactions);
   let latestTurn: ReturnType<typeof getAssistantTurnSummary> | undefined;
   for (let index = entries.length - 1; index >= 0; index--) {
@@ -84,12 +97,8 @@ export function latestTurnContextInspector(
   const result: LatestTurnContextInspector = {
     usage: latestUsage,
     turnUsage: latestTurn?.usage ?? latestUsage,
-    contextWindow: resolveContextWindow(
-      latestUsageMessage?.providerId,
-      latestUsageMessage?.modelId,
-      providerModels,
-      providers,
-    ),
+    contextWindow: knownContextWindow ?? DEFAULT_CONTEXT_WINDOW,
+    ...(knownContextWindow === undefined ? { contextWindowEstimated: true } : {}),
     tools: latestTurn?.tools ?? [],
     responseDurationMs: latestTurn?.responseDurationMs,
     responseOutputTokens: latestTurn?.responseOutputTokens,
@@ -101,6 +110,7 @@ export function latestTurnContextInspector(
   if (previous && previous.usage === result.usage &&
     sameUsage(previous.turnUsage, result.turnUsage) &&
     previous.contextWindow === result.contextWindow &&
+    previous.contextWindowEstimated === result.contextWindowEstimated &&
     previous.responseDurationMs === result.responseDurationMs &&
     previous.responseOutputTokens === result.responseOutputTokens &&
     previous.responseOutputEstimated === result.responseOutputEstimated &&

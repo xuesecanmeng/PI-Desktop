@@ -46,7 +46,7 @@ Renderer 负责呈现；Electron main 协调桌面能力：窗口生命周期、
 
 ## Opening file and folder links
 
-In **Settings → AI → Defaults**, **File and folder opening** chooses **Built-in
+In **Settings → Conversation → Input & links**, **File and folder opening** chooses **Built-in
 viewer** (default) or **System default application** for every file, including
 HTML, and directory. The built-in File Manager shows HTML source; use HTML's
 **Open with → Built-in browser** to run a page. Its submenu also offers File
