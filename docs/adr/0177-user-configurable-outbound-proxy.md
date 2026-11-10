@@ -57,10 +57,13 @@ best-effort revocation mode when the installed curl advertises it. This
 tolerates unavailable or offline revocation distribution points while keeping
 certificate verification on.
 
-5. **Not rewritten**: workspace Bash (host-core spawn env strips proxy
-   keys so credentials cannot leak into `env`), and the system browser used
-   for OAuth (`shell.openExternal`). Plugin utility processes keep their
-   stripped env; `pi.net.fetch` still goes through main.
+5. **Not rewritten by app proxy settings**: workspace Bash and the system
+   browser used for OAuth (`shell.openExternal`). The shared Host transport
+   strips proxy keys by default. The private develop Desktop restores only its
+   original startup proxy environment, including on Host restart, and removes
+   `PI_DESKTOP_PROXY_JSON` ([local amendment](private-develop-command-proxy.md)).
+   Plugin utility processes keep their stripped env; `pi.net.fetch` still goes
+   through main.
 
 6. **Apply without restart.** `settings.set` updates Chromium sessions
    (including `session-created`), main env, and `sidecar.configure`. A Test
@@ -76,7 +79,8 @@ certificate verification on.
    at a `127.0.0.1` SOCKS5 relay that injects stored custom credentials
    (issue #490). In System mode, the relay resolves the route through
    Electron for each destination and tries PAC fallbacks in order. No proxy
-   credentials are inherited by workspace Bash.
+   credentials from app settings are inherited by workspace Bash. User-provided
+   startup proxy credentials may be inherited in private develop (local amendment).
 
 ## Consequences
 

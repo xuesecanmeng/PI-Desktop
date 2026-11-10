@@ -85,8 +85,14 @@ over sidecar configuration / host RPC, never through process environment.
 Custom URLs with userinfo keep credentials for Node and curl; Chromium is
 pointed at a loopback SOCKS5 relay that injects them, because `proxyRules`
 cannot carry userinfo (issue #490). host-core marketplace `curl` gets explicit
-proxy arguments and does **not** inherit proxy env, so workspace Bash cannot
-see proxy credentials. Direct mode bypasses the System relay. TLS certificate
+proxy arguments. On private develop, Desktop restores its original startup
+proxy environment when launching each Host, so workspace shells and their
+children can use the computer's existing proxy. App proxy changes do not alter
+that snapshot; `PI_DESKTOP_PROXY_JSON` is removed from the Host environment.
+The headless Host transport still strips inherited proxy variables by default.
+This local behavior has no new setting and does not translate OS/PAC settings
+into command environment variables (ADR `private-develop-command-proxy`).
+Direct mode bypasses the System relay for app traffic. TLS certificate
 verification remains enabled on every route.
 
 Provider model-list and connection probes recover from Electron 43's exact

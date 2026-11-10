@@ -21,6 +21,7 @@ Each ADR includes:
 
 | ID | Title | Status |
 |---|---|---|
+| private-develop-command-proxy | [Inherit the computer proxy for private develop commands](private-develop-command-proxy.md) | Accepted for private develop only |
 | configurable-file-opening | [Configurable file opening and explicit directory links](configurable-file-opening.md) | Implemented candidate |
 | mode-definitions | [User-definable modes as staged workflows](mode-definitions.md) | Proposed |
 | sidebar-layout-recovery | [Recover sidebar layout independently of Chromium storage](sidebar-layout-recovery.md) | Accepted |

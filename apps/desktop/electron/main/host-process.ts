@@ -13,6 +13,7 @@ import {
 import { DbSchemaTooNewError, parseSchemaTooNew } from "./host-boot-diagnostics";
 import { redactValue } from "./logger";
 import { getModuleDirectory } from "./module-path";
+import { inheritedProxyEnv } from "./inherited-proxy-env";
 
 export type {
   HostNotificationHandler,
@@ -122,6 +123,8 @@ export class HostProcess extends RuntimeHostProcess {
       // source checkout, so it resolves the bundled-plugin directory and
       // host-core simply reconciles its registry against it (ADR 0105).
       env: {
+        ...inheritedProxyEnv,
+        PI_DESKTOP_PROXY_JSON: undefined,
         PI_DESKTOP_ELECTRON_PID: String(process.pid),
         ...(builtinPlugins ? { PI_DESKTOP_BUILTIN_PLUGINS_DIR: builtinPlugins } : {}),
       },

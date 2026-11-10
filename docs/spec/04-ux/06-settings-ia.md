@@ -256,7 +256,10 @@ application-window behavior rather than agent behavior.
     Custom applies one HTTP, HTTPS, or SOCKS5 URL to app-owned outbound
     traffic (model calls, marketplace, updates, model catalog, plugin
     `net.fetch`, and the in-app browser). Workspace Bash and the system
-    browser used for OAuth are not rewritten.
+    browser used for OAuth are not rewritten by this control. On private
+    develop, workspace commands retain Desktop's original startup proxy
+    environment without a separate switch; changing this control does not
+    change their route (ADR `private-develop-command-proxy`).
   - Custom shows a Proxy URL field (`socks5://127.0.0.1:1080` /
     `http://127.0.0.1:7890`, including `user:pass@` userinfo), a Bypass list
     defaulting to

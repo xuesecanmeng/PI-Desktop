@@ -11298,6 +11298,7 @@ must keep splitting are covered by `markdown-blocks.test.mjs`.
 
 | Acceptance | Scenarios |
 |---|---|
+| E / Security / Quality — Private command proxy inheritance | E2E-private-command-proxy |
 | C / E / Security / Quality — Gemini work setup | E2E-LIVE-VOICE-gemini-work-schema |
 | C / Quality — Continue after malformed tool output | E2E-RUNTIME-malformed-tool-call-continue-recovery |
 | B / Security / Quality — Optional provider client certificate requests | E2E-PROVIDER-optional-client-certificate |
@@ -15199,7 +15200,9 @@ are withdrawn with ADR 0165.
 - **Expected**: Custom covers model calls, marketplace, updates, plugin
   `net.fetch`, and the in-app browser. System covers provider and marketplace
   requests through Electron's OS/PAC resolver. Workspace Bash `env` does not
-  show `HTTP_PROXY` / `ALL_PROXY` from the setting. TLS verification remains
+  show `HTTP_PROXY` / `ALL_PROXY` from the setting; private develop preserves
+  the computer's original startup proxy instead (E2E-private-command-proxy).
+  TLS verification remains
   enabled on all routes. OAuth still opens the system
   browser. Invalid schemes (`file:`, `ftp:`, and SOCKS4) and malformed
   percent-encoded credentials are rejected. Authenticated HTTP and SOCKS5
@@ -15219,6 +15222,25 @@ are withdrawn with ADR 0165.
   restoration path is covered by `pnpm test:e2e:settings-scroll`. The full UI
   journey remains Draft (run only in a capable environment when this surface
   changes).
+
+### E2E-private-command-proxy: Computer proxy inheritance
+
+- **Preconditions**: private develop; built Host; Node/esbuild and curl available.
+  Set `PI_DESKTOP_HOST_BIN` to the Host binary.
+- **Command**: `node scripts/e2e-command-proxy.mjs`.
+- **Steps**: capture synthetic startup proxy variables; launch the production
+  Desktop Host transport; execute an environment probe and curl through the real
+  Host shell runner. Restart the Host after replacing or clearing the parent
+  proxy environment to model Custom/Direct. Repeat without a startup proxy.
+- **Expected**: startup proxies survive each Host launch; curl reaches the
+  loopback proxy and honors `NO_PROXY`; app proxy credentials and
+  `PI_DESKTOP_PROXY_JSON` are absent. No startup proxy means no injected proxy.
+- **Specs**: `03-runtime/07-process-model.md`, `04-ux/06-settings-ia.md`,
+  ADR `private-develop-command-proxy`.
+- **Acceptance**: command networking, startup/restart isolation. Fixtures are
+  loopback-only; no external provider or Docker service is used.
+- **Milestone**: private maintenance.
+- **Status**: automated.
 
 #### E2E-191: Newly emitted AppError codes stay registered
 

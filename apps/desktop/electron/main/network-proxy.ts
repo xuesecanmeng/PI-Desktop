@@ -16,7 +16,6 @@ import {
   proxyEnvAssignments,
   proxyHasCredentials,
   restoreProxyEnv,
-  snapshotProxyEnv,
   validateNetworkProxy,
   type ChromiumProxyConfig,
   type NetworkProxySettings,
@@ -26,12 +25,12 @@ import {
   type AuthenticatedProxyRelay,
 } from "@pi-desktop/agent-runtime";
 import { applyUserEndpointPolicyFromAppSettings } from "./endpoint-policy";
+import { inheritedProxyEnv } from "./inherited-proxy-env";
 import {
   startSystemProxyRelay,
   type SystemProxyRelay,
 } from "@pi-desktop/agent-runtime/system-proxy-relay";
 
-const originalEnv = snapshotProxyEnv(process.env);
 let applied: NetworkProxySettings = { mode: "system" };
 let fetchPatched = false;
 let sessionHookInstalled = false;
@@ -81,7 +80,7 @@ export async function applyNetworkProxy(
       : settings,
   );
   applied = next;
-  if (next.mode === "system") restoreProxyEnv(originalEnv, process.env);
+  if (next.mode === "system") restoreProxyEnv(inheritedProxyEnv, process.env);
   else applyProxyEnvAssignments(proxyEnvAssignments(next), process.env);
   if (next.mode === "custom") {
     process.env.PI_DESKTOP_PROXY_JSON = JSON.stringify(next);

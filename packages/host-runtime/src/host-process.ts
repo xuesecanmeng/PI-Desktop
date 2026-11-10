@@ -33,8 +33,8 @@ export type HostProcessOptions = {
   dataDir: string;
   /**
    * Extra environment for the child. The inherited environment is copied with
-   * proxy variables stripped first, so host-core never sees proxy credentials
-   * (D340); entries here are applied on top.
+   * proxy variables stripped first (D340); entries here are applied on top.
+   * Desktop restores its original startup proxy without inheriting app settings.
    */
   env?: Record<string, string | undefined>;
   /** Receives raw stderr text as it arrives; the embedding host owns redaction and logging. */
